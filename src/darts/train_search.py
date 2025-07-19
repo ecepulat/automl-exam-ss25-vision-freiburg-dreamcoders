@@ -24,6 +24,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from automl.datasets import FashionDataset
 #change parser = argparse.ArgumentParser("cifar") to parser = argparse.ArgumentParser("fashion")
 #we are changin here because we will embed hyperparameters for now
+
+
+
+
 """
 parser = argparse.ArgumentParser("fashion")
 parser.add_argument('--data', type=str, default='../data', help='location of the data corpus')
@@ -50,10 +54,14 @@ parser.add_argument('--arch_learning_rate', type=float, default=3e-4, help='lear
 parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
 args = parser.parse_args()
 """
+
+
+from dotenv import load_dotenv
+load_dotenv()
 from types import SimpleNamespace
 args = SimpleNamespace(
     data='/home/aysu/Documents/AutoML/data/fashion',
-    batch_size=64,
+    batch_size=32,
     learning_rate=0.025,
     learning_rate_min=0.001,
     momentum=0.9,
@@ -79,7 +87,12 @@ args = SimpleNamespace(
     auxiliary_weight=0.4
 )
 
+print("🔧 PYTORCH_CUDA_ALLOC_CONF =", os.environ.get("PYTORCH_CUDA_ALLOC_CONF"))
 
+print("🖥️  CUDA Device Info:")
+print("    Total GPUs:", torch.cuda.device_count())
+print("    Current GPU ID:", torch.cuda.current_device())
+print("    Device Name:", torch.cuda.get_device_name(args.gpu))
 args.save = 'search-{}-{}'.format(args.save, time.strftime("%Y%m%d-%H%M%S"))
 utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
 
@@ -145,6 +158,7 @@ def main():
   architect = Architect(model, args)
 
   for epoch in tqdm(range(args.epochs), desc="Epochs"):
+    print(f"!!!!!!!!!!!!!!!!![GPU Usage] Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB | Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB")
     scheduler.step()
     lr = scheduler.get_lr()[0]
     logging.info('epoch %d lr %e', epoch, lr)
@@ -152,6 +166,9 @@ def main():
 
     genotype = model.genotype()
     logging.info('genotype = %s', genotype)
+    genotype_path = os.path.join(args.save, 'genotype.txt')
+    with open(genotype_path, 'w') as f:
+        f.write(str(genotype))
 
     # training
     train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr)
