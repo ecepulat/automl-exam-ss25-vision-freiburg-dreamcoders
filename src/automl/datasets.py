@@ -177,3 +177,5 @@ class FashionDataset(BaseVisionDataset):
     height = 28
     channels = 1
     num_classes = 10
+
+
