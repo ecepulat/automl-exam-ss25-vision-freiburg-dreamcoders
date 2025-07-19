@@ -16,10 +16,10 @@ from tqdm import tqdm
 from torch.autograd import Variable
 from model_search import Network
 from architect import Architect
+import torch.multiprocessing
 
+torch.cuda.empty_cache()
 
-import sys
-import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from automl.datasets import FashionDataset
 #change parser = argparse.ArgumentParser("cifar") to parser = argparse.ArgumentParser("fashion")
@@ -50,10 +50,10 @@ parser.add_argument('--arch_learning_rate', type=float, default=3e-4, help='lear
 parser.add_argument('--arch_weight_decay', type=float, default=1e-3, help='weight decay for arch encoding')
 args = parser.parse_args()
 """
-from types import SimpleNamespace
+""" from types import SimpleNamespace
 args = SimpleNamespace(
-    data='/home/aysu/Documents/AutoML/data/fashion',
-    batch_size=64,
+    data='C:/Users/ecepu/Documents/AutoML/data',
+    batch_size=16,
     learning_rate=0.025,
     learning_rate_min=0.001,
     momentum=0.9,
@@ -61,8 +61,8 @@ args = SimpleNamespace(
     report_freq=50,
     gpu=0,
     epochs=10,
-    init_channels=18,
-    layers=8,
+    init_channels=8,
+    layers=5,
     model_path='saved_models',
     cutout=False,
     cutout_length=16,
@@ -88,7 +88,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format=log_format, datefmt='%m/%d %I:%M:%S %p')
 fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
 fh.setFormatter(logging.Formatter(log_format))
-logging.getLogger().addHandler(fh)
+logging.getLogger().addHandler(fh) """
 
 
 FASHION_CLASSES = 10
@@ -123,7 +123,7 @@ def main():
   train_transform, valid_transform = utils._data_transforms_fashion(args)
   
   #change the training dataset to the Fashion
-  train_data = FashionDataset(root='/home/aysu/Documents/AutoML/data', split='train', transform=train_transform)
+  train_data = FashionDataset(root=args.data, split='train', transform=train_transform)
 
   num_train = len(train_data)
   indices = list(range(num_train))
@@ -132,12 +132,12 @@ def main():
   train_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-      pin_memory=True, num_workers=2)
+      pin_memory=True, num_workers=4)
 
   valid_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
-      pin_memory=True, num_workers=2)
+      pin_memory=True, num_workers=4)
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
@@ -146,7 +146,7 @@ def main():
 
   for epoch in tqdm(range(args.epochs), desc="Epochs"):
     scheduler.step()
-    lr = scheduler.get_lr()[0]
+    lr = scheduler.get_last_lr()[0]
     logging.info('epoch %d lr %e', epoch, lr)
     print(f"\n📍 Epoch {epoch+1}/{args.epochs} | Learning Rate: {lr:.6f}")
 
@@ -165,34 +165,29 @@ def main():
     
     utils.save(model, os.path.join(args.save, 'weights.pt'))
 
-
 def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr):
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
   top5 = utils.AvgrageMeter()
 
+  valid_iter = iter(valid_queue)  # ✅ Create the iterator only once
+
   for step, (input, target) in enumerate(train_queue):
     model.train()
     n = input.size(0)
 
-    #input = Variable(input, requires_grad=False).cuda()
-
-    #target = Variable(target, requires_grad=False).cuda(async=True) ❌This flag is not used anymore
-    
-    # get a random minibatch from the search queue with replacement
-    #input_search = Variable(input_search, requires_grad=False).cuda()  ❌Variable(...) is not needed anymore in PyTorch ≥1.0 
-    #target_search = Variable(target_search, requires_grad=False).cuda(async=True)  
-    
-    #========== Use modern PyTorch practice — no Variable, use non_blocking=True
-    # NEW Data loading (training input)
     input = input.cuda(non_blocking=True)
     target = target.cuda(non_blocking=True)
-    
-    # Get a random minibatch from the search queue (validation)
-    input_search, target_search = next(iter(valid_queue))
+
+    # ✅ Reuse iterator safely
+    try:
+      input_search, target_search = next(valid_iter)
+    except StopIteration:
+      valid_iter = iter(valid_queue)
+      input_search, target_search = next(valid_iter)
+
     input_search = input_search.cuda(non_blocking=True)
     target_search = target_search.cuda(non_blocking=True)
-
 
     architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
 
@@ -205,7 +200,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr):
     optimizer.step()
 
     prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-    objs.update(loss.data.item(), n)
+    objs.update(loss.item(), n)
     top1.update(prec1.item(), n)
     top5.update(prec5.item(), n)
 
@@ -213,7 +208,6 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr):
       logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
 
   return top1.avg, objs.avg
-
 
 def infer(valid_queue, model, criterion):
   objs = utils.AvgrageMeter()
@@ -223,28 +217,68 @@ def infer(valid_queue, model, criterion):
 
   with torch.no_grad():
     for step, (input, target) in enumerate(valid_queue):
-      #input = Variable(input, volatile=True).cuda()
-      #target = Variable(target, volatile=True).cuda(async=True)
-
-      input = input.cuda(non_blocking=True) #these 2 lines are newly added
+      input = input.cuda(non_blocking=True)
       target = target.cuda(non_blocking=True)
-
 
       logits = model(input)
       loss = criterion(logits, target)
 
       prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
       n = input.size(0)
-      objs.update(loss.item(), n)   #change loss.data[0]  to .item
+      objs.update(loss.item(), n)
       top1.update(prec1.item(), n)
       top5.update(prec5.item(), n)
 
-    if step % args.report_freq == 0:
-      logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+      if step % args.report_freq == 0:
+        logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
 
   return top1.avg, objs.avg
 
 
 if __name__ == '__main__':
-  main() 
+  import torch.multiprocessing
+  torch.multiprocessing.set_start_method('spawn', force=True)
+
+  from types import SimpleNamespace
+  args = SimpleNamespace(
+      data='C:/Users/ecepu/Documents/AutoML/data',
+      batch_size=16,
+      learning_rate=0.025,
+      learning_rate_min=0.001,
+      momentum=0.9,
+      weight_decay=3e-4,
+      report_freq=50,
+      gpu=0,
+      epochs=5,
+      init_channels=8,
+      layers=5,
+      model_path='saved_models',
+      cutout=False,
+      cutout_length=16,
+      drop_path_prob=0.2,
+      save='EXP',
+      seed=0,
+      grad_clip=5,
+      train_portion=0.3,
+      unrolled=False,
+      arch_learning_rate=3e-4,
+      arch_weight_decay=1e-3,
+      arch='DARTS',
+      auxiliary=False,
+      auxiliary_weight=0.4
+  )
+
+  args.save = 'search-{}-{}'.format(args.save, time.strftime("%Y%m%d-%H%M%S"))
+  utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
+
+  log_format = '%(asctime)s %(message)s'
+  logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+      format=log_format, datefmt='%m/%d %I:%M:%S %p')
+  fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
+  fh.setFormatter(logging.Formatter(log_format))
+  logging.getLogger().addHandler(fh)
+
+  from automl.datasets import FashionDataset  # <-- move this inside too
+
+  main()
 
