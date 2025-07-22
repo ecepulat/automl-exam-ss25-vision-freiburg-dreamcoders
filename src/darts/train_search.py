@@ -99,6 +99,8 @@ def main():
     logging.info('no gpu device available')
     sys.exit(1)
 
+  torch.cuda.set_device(0)
+
   np.random.seed(args.seed)
   torch.cuda.set_device(args.gpu)
   cudnn.benchmark = True
@@ -132,12 +134,12 @@ def main():
   train_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-      pin_memory=True, num_workers=4)
+      pin_memory=True, num_workers=6)
 
   valid_queue = torch.utils.data.DataLoader(
       train_data, batch_size=args.batch_size,
       sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
-      pin_memory=True, num_workers=4)
+      pin_memory=True, num_workers=6)
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
@@ -242,7 +244,7 @@ if __name__ == '__main__':
   from types import SimpleNamespace
   args = SimpleNamespace(
       data='C:/Users/ecepu/Documents/AutoML/data',
-      batch_size=16,
+      batch_size=24,
       learning_rate=0.025,
       learning_rate_min=0.001,
       momentum=0.9,

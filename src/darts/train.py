@@ -12,10 +12,17 @@ import genotypes
 import torch.utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
-from automl.datasets import FashionDataset
+# from automl.datasets import FashionDataset
 from tqdm import tqdm
 from torch.autograd import Variable
 from model import NetworkCIFAR as Network
+
+import torch.multiprocessing
+
+torch.cuda.empty_cache()
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from automl.datasets import FashionDataset
 
 """
 parser = argparse.ArgumentParser("fashion")
@@ -44,15 +51,15 @@ args = parser.parse_args()
 
 from types import SimpleNamespace
 
-args = SimpleNamespace(
+"""args = SimpleNamespace(
     data='/home/aysu/Documents/AutoML/data/fashion',
-    batch_size=96,
+    batch_size=24,
     learning_rate=0.025,
     momentum=0.9,
     weight_decay=3e-4,
     report_freq=50,
     gpu=0,
-    epochs=600,
+    epochs=70,
     init_channels=36,
     layers=20,
     model_path='saved_models',
@@ -78,7 +85,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format=log_format, datefmt='%m/%d %I:%M:%S %p')
 fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
 fh.setFormatter(logging.Formatter(log_format))
-logging.getLogger().addHandler(fh)
+logging.getLogger().addHandler(fh)"""
 
 FASHION_CLASSES = 10
 
@@ -121,10 +128,10 @@ def main():
   #=======================
 
   train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=2)
+      train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=6)
 
   valid_queue = torch.utils.data.DataLoader(
-      valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=2)
+      valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=6)
 
   scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
 
@@ -166,9 +173,13 @@ def train(train_queue, model, criterion, optimizer):
 
     prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
     n = input.size(0)
-    objs.update(loss.data[0], n)
-    top1.update(prec1.data[0], n)
-    top5.update(prec5.data[0], n)
+    # objs.update(loss.data[0], n)
+    # top1.update(prec1.data[0], n)
+    # top5.update(prec5.data[0], n)
+
+    objs.update(loss.item(), n) # to solve the access a value from a scalar (0-dimensional tensor) using indexing error
+    top1.update(prec1.item(), n)
+    top5.update(prec5.item(), n)
 
     if step % args.report_freq == 0:
       logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
@@ -176,7 +187,7 @@ def train(train_queue, model, criterion, optimizer):
   return top1.avg, objs.avg
 
 
-def infer(valid_queue, model, criterion):
+def infer(valid_queue, model, criterion): 
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
   top5 = utils.AvgrageMeter()
@@ -193,9 +204,13 @@ def infer(valid_queue, model, criterion):
 
       prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
       n = input.size(0)
-      objs.update(loss.data[0], n)
-      top1.update(prec1.data[0], n)
-      top5.update(prec5.data[0], n)
+      # objs.update(loss.data[0], n)
+      # top1.update(prec1.data[0], n)
+      # top5.update(prec5.data[0], n)
+
+      objs.update(loss.item(), n) # to solve the access a value from a scalar (0-dimensional tensor) using indexing error
+      top1.update(prec1.item(), n)
+      top5.update(prec5.item(), n)
 
     if step % args.report_freq == 0:
       logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
@@ -204,5 +219,43 @@ def infer(valid_queue, model, criterion):
 
 
 if __name__ == '__main__':
+  import torch.multiprocessing
+  torch.multiprocessing.set_start_method('spawn', force=True)
+
+  args = SimpleNamespace(
+    data='C:/Users/ecepu/Documents/AutoML/data',
+    batch_size=24,
+    learning_rate=0.025,
+    momentum=0.9,
+    weight_decay=3e-4,
+    report_freq=50,
+    gpu=0,
+    epochs=70,
+    init_channels=36,
+    layers=20,
+    model_path='saved_models',
+    auxiliary=False,
+    auxiliary_weight=0.4,
+    cutout=False,
+    cutout_length=16,
+    drop_path_prob=0.2,
+    save='EXP',
+    seed=0,
+    arch='DARTS',
+    grad_clip=5
+  )
+
+  args.save = 'eval-{}-{}'.format(args.save, time.strftime("%Y%m%d-%H%M%S"))
+
+
+  args.save = 'eval-{}-{}'.format(args.save, time.strftime("%Y%m%d-%H%M%S"))
+  utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
+
+  log_format = '%(asctime)s %(message)s'
+  logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+      format=log_format, datefmt='%m/%d %I:%M:%S %p')
+  fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
+  fh.setFormatter(logging.Formatter(log_format))
+  logging.getLogger().addHandler(fh)
   main() 
 

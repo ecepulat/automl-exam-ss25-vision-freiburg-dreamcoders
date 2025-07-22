@@ -1,6 +1,0 @@
-2025-07-19 15:19:30,550 gpu device = 0
-2025-07-19 15:19:30,550 args = namespace(data='C:/Users/ecepu/Documents/AutoML/data', batch_size=16, learning_rate=0.025, learning_rate_min=0.001, momentum=0.9, weight_decay=0.0003, report_freq=50, gpu=0, epochs=10, init_channels=8, layers=5, model_path='saved_models', cutout=False, cutout_length=16, drop_path_prob=0.2, save='search-EXP-20250719-151929', seed=0, grad_clip=5, train_portion=0.5, unrolled=False, arch_learning_rate=0.0003, arch_weight_decay=0.001, arch='DARTS', auxiliary=False, auxiliary_weight=0.4)
-2025-07-19 15:19:32,249 param size = 0.393778MB
-2025-07-19 15:19:32,292 epoch 0 lr 2.383973e-02
-2025-07-19 15:19:32,292 genotype = Genotype(normal=[('avg_pool_3x3', 0), ('dil_conv_5x5', 1), ('skip_connect', 0), ('max_pool_3x3', 1), ('avg_pool_3x3', 1), ('sep_conv_3x3', 2), ('max_pool_3x3', 1), ('sep_conv_5x5', 4)], normal_concat=range(2, 6), reduce=[('dil_conv_5x5', 1), ('dil_conv_3x3', 0), ('avg_pool_3x3', 1), ('avg_pool_3x3', 0), ('avg_pool_3x3', 1), ('skip_connect', 0), ('sep_conv_5x5', 2), ('dil_conv_5x5', 4)], reduce_concat=range(2, 6))
-2025-07-19 15:19:49,017 train 000 2.411615e+00 12.500000 43.750000
