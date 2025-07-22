@@ -76,3 +76,10 @@ DARTS_V2 = Genotype(normal=[('sep_conv_3x3', 0), ('sep_conv_3x3', 1), ('sep_conv
 
 DARTS = DARTS_V2
 
+# Manually checked the log file and assigned as best genotype
+BEST_GENOTYPE = Genotype( 
+  normal=[('sep_conv_3x3', 0), ('dil_conv_3x3', 1), ('sep_conv_3x3', 0), ('dil_conv_3x3', 1), ('sep_conv_3x3', 1), ('sep_conv_3x3', 3), ('skip_connect', 0), ('sep_conv_3x3', 1)],
+  normal_concat=[2, 3, 4, 5],
+  reduce=[('max_pool_3x3', 0), ('max_pool_3x3', 1), ('skip_connect', 2), ('sep_conv_3x3', 0), ('sep_conv_3x3', 3), ('sep_conv_3x3', 1), ('skip_connect', 2), ('dil_conv_3x3', 0)],
+  reduce_concat=[2, 3, 4, 5]
+)

@@ -104,7 +104,9 @@ def main():
   logging.info('gpu device = %d' % args.gpu)
   logging.info("args = %s", args)
 
-  genotype = eval("genotypes.%s" % args.arch)
+  # genotype = eval("genotypes.%s" % args.arch)
+  from genotypes import BEST_GENOTYPE
+  genotype = BEST_GENOTYPE
   model = Network(args.init_channels, FASHION_CLASSES, args.layers, args.auxiliary, genotype)
   model = model.cuda()
 
@@ -241,7 +243,7 @@ if __name__ == '__main__':
     drop_path_prob=0.2,
     save='EXP',
     seed=0,
-    arch='DARTS',
+    arch='BEST_GENOTYPE', # Ensure the train.py loads the best architecture, not the hardcoded DARTS_V1 or DARTS_V2.
     grad_clip=5
   )
 
