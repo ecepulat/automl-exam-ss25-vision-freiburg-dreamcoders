@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset
@@ -57,10 +58,13 @@ class AutoMLDataset(Dataset):
             "num_channels": self.num_channels,      # 1 or 3
             "class_distribution": self.get_class_distribution()
         }
+        
 
 def analyze_dataset(dataset_name: str, save_to_file: bool = True):
-    base_path = os.path.expanduser("~/Documents/AutoML/data")
-    dataset_path = os.path.join(base_path, dataset_name)
+
+    project_root = Path(__file__).resolve().parents[2]
+    dataset_path = project_root / "data" / dataset_name
+    print(dataset_path)
 
     # Load CSV
     csv_path = os.path.join(dataset_path, "train.csv")
