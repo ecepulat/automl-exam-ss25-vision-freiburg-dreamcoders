@@ -9,18 +9,18 @@ from torch.utils.data import DataLoader
 from PIL import Image
 from pathlib import Path
 from sklearn.model_selection import train_test_split
-
+import time
 from feed_data import BalancedDataset
 from data_analyze import analyze_dataset
 from utils import get_default_transforms
 from model_builder import build_model_from_config
 
-
+optuna.logging.set_verbosity(optuna.logging.INFO)
 def define_search_space(trial):
     """
     Define the architectural and training hyperparameter search space for Optuna.
     """
-    num_layers = trial.suggest_int("num_layers", 6, 20)
+    num_layers = trial.suggest_int("num_layers",4, 10)
     blocks = []
     for i in range(num_layers):
         blocks.append({
@@ -37,11 +37,53 @@ def define_search_space(trial):
     pool_type = trial.suggest_categorical("pool_type", ["none", "max", "avg"])
     return blocks, dropout, pool_type
 
+import datetime
 
+
+def print_current_trial(study, trial):
+    trial_info = {
+        "trial_number": trial.number,
+        "value": trial.value,
+        "parameters": trial.params,
+        "best_so_far": {
+            "trial": study.best_trial.number,
+            "value": study.best_trial.value
+        },
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 🔴 "duration_sec" intentionally removed
+    }
+
+    # Optional print to console
+    print(f"\n🧪 [Trial {trial.number}] Value: {trial.value:.4f}")
+    print(f"  → Parameters: {trial.params}")
+    print(f"  → Best so far: Trial {study.best_trial.number} (value: {study.best_trial.value:.4f})")
+
+    # Save safely to JSON log
+    log_path = f"trial_logs_{study.study_name}.json"
+    logs = load_existing_log_safely(log_path)
+    logs.append(trial_info)
+    with open(log_path, "w") as f:
+        json.dump(logs, f, indent=4)
+
+
+def load_existing_log_safely(path):
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        print(f"[⚠️ WARNING] Failed to decode {path}. Starting with empty log.")
+        return []
+    
 def objective(trial, dataset_name="flowers"):
     """
     Objective function to minimize (1 - validation accuracy) using Optuna.
     """
+
+
+
+    trial_start_time = time.time()
     # Analyze and fetch metadata
     analyze_dataset(dataset_name)
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -54,7 +96,7 @@ def objective(trial, dataset_name="flowers"):
         metadata = json.load(f)
 
     # Fidelity dimension: resolution reduction factor
-    resize_factor = trial.suggest_float("resize_factor", 0.25, 1.0)
+    resize_factor = 0.3
     original_res = metadata["image_resolution"]
     new_res = (int(original_res[0] * resize_factor), int(original_res[1] * resize_factor))
     metadata["image_resolution"] = new_res
@@ -83,14 +125,19 @@ def objective(trial, dataset_name="flowers"):
     # Model initialization
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     blocks, dropout, pool_type = define_search_space(trial)
-    model = build_model_from_config(blocks, dropout, pool_type, num_classes=metadata["num_classes"])
+    model = build_model_from_config(blocks, dropout, pool_type,
+                                     num_classes=metadata["num_classes"], 
+                                     input_resolution=metadata["image_resolution"])   
+   
     model = model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=trial.suggest_float("lr", 1e-5, 1e-3, log=True))
     criterion = nn.CrossEntropyLoss()
 
     # Training loop (5 epochs)
-    for epoch in range(5):
+    for epoch in range(6):
+        start = time.time()
+        print(f"trial : {trial.number} epoch : {epoch}")
         model.train()
         for images, labels in train_loader:
             images, labels = images.to(device), labels.to(device)
@@ -100,10 +147,10 @@ def objective(trial, dataset_name="flowers"):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+        print(f"⏱️ Epoch {epoch} duration: {time.time() - start:.2f}s")
         trial.report(loss.item(), epoch)
-        if trial.should_prune():
-            raise optuna.TrialPruned()
+        #if trial.should_prune():
+            #raise optuna.TrialPruned()
 
     # Validation evaluation
     model.eval()
@@ -117,6 +164,7 @@ def objective(trial, dataset_name="flowers"):
             total += labels.size(0)
 
     accuracy = correct / total
+    trial.duration = time.time() - trial_start_time
     return 1 - accuracy
 
 
@@ -144,8 +192,13 @@ def run_optuna_hyperband(dataset_name="flowers"):
         sampler=optuna.samplers.TPESampler(seed=42),
         pruner=optuna.pruners.HyperbandPruner()
     )
-    study.optimize(lambda trial: objective(trial, dataset_name), n_trials=50)
 
+
+    study.optimize(
+    lambda trial: objective(trial, dataset_name),
+    callbacks=[print_current_trial],
+    timeout=18000  # in seconds 5 hours 
+)
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)
 

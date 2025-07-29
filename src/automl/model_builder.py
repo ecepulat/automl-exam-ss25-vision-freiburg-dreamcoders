@@ -1,8 +1,8 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# This Block class defines a single unit of the architecture based on sampled hyperparameters.
-# It supports depthwise or standard convolutions, optional residual connections, and squeeze-and-excitation blocks.
+# Single convolutional block supporting depthwise, SE, and residual connection
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -11,11 +11,10 @@ class Block(nn.Module):
         self.use_depthwise = config["use_depthwise"]
 
         stride = 2 if self.downsample else 1
-        in_channels = config["filters"]
+        in_channels = config["in_channels"]
         out_channels = config["filters"]
 
         if self.use_depthwise:
-            # Depthwise separable convolution block
             self.conv = nn.Sequential(
                 nn.Conv2d(in_channels, in_channels, kernel_size=config["kernel"], stride=stride,
                           padding=config["kernel"] // 2, groups=in_channels, bias=False),
@@ -24,7 +23,6 @@ class Block(nn.Module):
                 nn.ReLU(inplace=True)
             )
         else:
-            # Standard convolution block
             self.conv = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=config["kernel"], stride=stride,
                           padding=config["kernel"] // 2, bias=False),
@@ -34,7 +32,6 @@ class Block(nn.Module):
 
         self.use_se = config["use_se"]
         if self.use_se:
-            # Squeeze-and-Excitation module
             self.se = nn.Sequential(
                 nn.AdaptiveAvgPool2d(1),
                 nn.Conv2d(out_channels, out_channels // 4, kernel_size=1),
@@ -52,26 +49,28 @@ class Block(nn.Module):
             out = out + x
         return out
 
-
-# CustomNet builds a full model using a sequence of sampled blocks, pooling, and classification layers.
+# Full model constructed from blocks + global pooling + classifier
 class CustomNet(nn.Module):
-    def __init__(self, blocks, dropout, pool_type, num_classes):
+    def __init__(self, blocks, dropout, pool_type, num_classes, input_resolution=(128, 128)):
         super().__init__()
-        # Stem layer to map from 3 input channels to first block's filter count
+
+        # Initial stem conv layer
         self.stem = nn.Sequential(
             nn.Conv2d(3, blocks[0]["filters"], kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(blocks[0]["filters"]),
             nn.ReLU(inplace=True)
         )
 
-        # Stack all block configurations
+        # Stack of sampled blocks
         layers = []
+        in_channels = blocks[0]["filters"]
         for block_cfg in blocks:
+            block_cfg["in_channels"] = in_channels
             layers.append(Block(block_cfg))
+            in_channels = block_cfg["filters"]
         self.layers = nn.Sequential(*layers)
 
-        # Global pooling layer choice
-        self.pool_type = pool_type
+        # Pooling strategy
         if pool_type == "avg":
             self.global_pool = nn.AdaptiveAvgPool2d(1)
         elif pool_type == "max":
@@ -80,7 +79,17 @@ class CustomNet(nn.Module):
             self.global_pool = nn.Identity()
 
         self.dropout = nn.Dropout(dropout)
-        self.classifier = nn.Linear(blocks[-1]["filters"], num_classes)
+
+        # Dynamically compute flattened feature size
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, *input_resolution)
+            x = self.stem(dummy)
+            x = self.layers(x)
+            x = self.global_pool(x)
+            x = x.view(1, -1)
+            feature_dim = x.shape[1]
+
+        self.classifier = nn.Linear(feature_dim, num_classes)
 
     def forward(self, x):
         x = self.stem(x)
@@ -90,9 +99,6 @@ class CustomNet(nn.Module):
         x = self.dropout(x)
         return self.classifier(x)
 
-
-# Entry point function to be called from Optuna pipeline
-# Takes sampled hyperparameters (blocks, dropout, pooling) and returns a PyTorch model
-
-def build_model_from_config(blocks, dropout, pool_type, num_classes):
-    return CustomNet(blocks, dropout, pool_type, num_classes)
+# External entry point to create the model in search pipeline
+def build_model_from_config(blocks, dropout, pool_type, num_classes, input_resolution=(128, 128)):
+    return CustomNet(blocks, dropout, pool_type, num_classes, input_resolution)
