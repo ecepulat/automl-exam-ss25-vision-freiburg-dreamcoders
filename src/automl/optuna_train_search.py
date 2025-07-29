@@ -14,7 +14,8 @@ from feed_data import BalancedDataset
 from data_analyze import analyze_dataset
 from utils import get_default_transforms
 from model_builder import build_model_from_config
-
+from torch.utils.data import random_split
+import traceback
 optuna.logging.set_verbosity(optuna.logging.INFO)
 def define_search_space(trial):
     """
@@ -100,7 +101,7 @@ def objective(trial, dataset_name="flowers"):
         resize_factor = 0.3
         original_res = metadata["image_resolution"]
         new_res = (int(original_res[0] * resize_factor), int(original_res[1] * resize_factor))
-        metadata["image_resolution"] = new_res
+
 
         # Load dataset and split train/val
         project_root = Path(__file__).resolve().parents[2]
@@ -108,19 +109,18 @@ def objective(trial, dataset_name="flowers"):
         df = pd.read_csv(os.path.join(base_path, "train.csv"))
         images_path = os.path.join(base_path, "images_train")
 
-        train_df, val_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
+        #========== Dataset TRAIN / VALIDATION Split
+        # Step 1: Create one big balanced dataset first
+        balanced_dataset = BalancedDataset(df, images_path, metadata, resized_res=new_res)
+        # Step 2: Split the indices
 
-        # Train dataset with augmentations
-        train_dataset = BalancedDataset(train_df, images_path, metadata)
+        val_ratio = 0.2
+        val_size = int(len(balanced_dataset) * val_ratio)
+        train_size = len(balanced_dataset) - val_size
+        train_dataset, val_dataset = random_split(balanced_dataset, [train_size, val_size])
+        #Step 3: Wrap in DataLoaders
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
-        # Validation dataset (no augmentation, just normalization)
-        val_transform = get_default_transforms(metadata)
-        val_dataset = [
-            (val_transform(Image.open(os.path.join(images_path, row["image_file_name"])).convert("RGB")),
-            int(row["label"]))
-            for _, row in val_df.iterrows()
-        ]
+        #We dont shuffle the validation set because We want deterministic, reproducible evaluation.
         val_loader = DataLoader(val_dataset, batch_size=32)
 
         # Model initialization
@@ -128,7 +128,7 @@ def objective(trial, dataset_name="flowers"):
         blocks, dropout, pool_type = define_search_space(trial)
         model = build_model_from_config(blocks, dropout, pool_type,
                                         num_classes=metadata["num_classes"], 
-                                        input_resolution=metadata["image_resolution"])   
+                                        input_resolution=new_res)   
     
         model = model.to(device)
 

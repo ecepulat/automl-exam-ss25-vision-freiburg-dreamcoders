@@ -31,20 +31,28 @@ def calculate_mean_std(dataset_class: Any):
     return mean, std
 
 
-def get_default_transforms(meta):
+def get_default_transforms(meta, resized_res=None):
     """
-    Returns a torchvision transformation pipeline based on dataset metadata.
-    Resizes and normalizes only (no augmentation).
-    
+    Returns a torchvision transformation pipeline that resizes and normalizes images
+    without applying any data augmentation.
+
     Args:
         meta (dict): Contains 'image_resolution' and 'num_channels'.
-    
+        resized_res (tuple or None): Optional (H, W) tuple to override the default resolution.
+
     Returns:
-        transform: torchvision.transforms.Compose
+        transform (torchvision.transforms.Compose): A composed transform with resizing,
+        tensor conversion, and normalization.
     """
-    image_size = meta["image_resolution"]
+
+    image_size = resized_res if resized_res is not None else meta["image_resolution"]
     num_channels = meta["num_channels"]
-    print(f"Image size found in the dataset is: {image_size}")
+
+    if resized_res is not None:
+        print(f"get_default_transforms image reso is downsized from {meta["image_resolution"]} to {resized_res}")
+    else:
+        print(f"get_default_transforms image reso is not downsized {meta["image_resolution"]}")
+
     if num_channels == 1:
         normalize = transforms.Normalize((0.5,), (0.5,))
     else:
@@ -58,18 +66,26 @@ def get_default_transforms(meta):
     ])
 
 
-def get_augmented_transforms(meta):
+def get_augmented_transforms(meta, resized_res=None):
     """
     Returns a transform pipeline that includes TrivialAugmentWide for data augmentation.
-    
+
     Args:
         meta (dict): Contains 'image_resolution' and 'num_channels'.
-    
+        resized_res (tuple or None): Optional (H, W) tuple to override the default resolution.
+
     Returns:
-        transform: torchvision.transforms.Compose
+        transform (torchvision.transforms.Compose): A composed transform with resizing,
+        TrivialAugmentWide, tensor conversion, and normalization.
     """
-    image_size = meta["image_resolution"]
+
+    image_size = resized_res if resized_res is not None else meta["image_resolution"]
+
     num_channels = meta["num_channels"]
+    if resized_res is not None:
+        print(f"get_augmented_transforms image reso is downsized from {meta["image_resolution"]} to {resized_res}")
+    else:
+        print(f"get_augmented_transforms image reso is not downsized {meta["image_resolution"]}")
 
     if num_channels == 1:
         normalize = transforms.Normalize((0.5,), (0.5,))
