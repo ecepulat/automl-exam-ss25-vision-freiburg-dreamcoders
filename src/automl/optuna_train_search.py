@@ -10,29 +10,39 @@ from PIL import Image
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 import time
+import math
 from feed_data import BalancedDataset
 from data_analyze import analyze_dataset
 from utils import get_default_transforms
 from model_builder import build_model_from_config
 from torch.utils.data import random_split
 import traceback
+import random
 optuna.logging.set_verbosity(optuna.logging.INFO)
-def define_search_space(trial):
+def define_search_space(trial, ds_budget):
     """
     Define the architectural and training hyperparameter search space for Optuna.
     """
-    num_layers = trial.suggest_int("num_layers",4, 10)
+    num_layers = trial.suggest_int("num_layers",6, 12)
     blocks = []
+    # Pick exactly ds_budget layers that will downsample
+    all_indices = list(range(num_layers))
+    ds_indices = set(random.sample(all_indices, min(ds_budget, num_layers)))  # <-- This is the trick
+    #here if we have 8 layers we will randomly chose budget many layers. (Because it cannot apply downsampling in all of the layers)
+
     for i in range(num_layers):
         blocks.append({
             "filters": trial.suggest_categorical(f"filters{i}", [32, 64, 96, 128, 160, 192]),
             "kernel": trial.suggest_categorical(f"kernel{i}", [3, 5, 7]),
             "use_se": trial.suggest_categorical(f"usese{i}", [True, False]),
             "use_residual": trial.suggest_categorical(f"useresidual{i}", [True, False]),
-            "downsample": trial.suggest_categorical(f"downsample{i}", [True, False]),
+            "downsample": i in ds_indices,
             "expansion": trial.suggest_categorical(f"expansion{i}", [1, 3, 6]),
             "use_depthwise": trial.suggest_categorical(f"usedepthwise{i}", [True, False]),
         })
+        # Count how many downsample=True were chosen
+    downsample_count = sum(block["downsample"] for block in blocks)
+    print(f"[Trial {trial.number}] 🔻 Downsampling count: {downsample_count} (Budget: {ds_budget})")
 
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
     pool_type = trial.suggest_categorical("pool_type", ["none", "max", "avg"])
@@ -40,6 +50,8 @@ def define_search_space(trial):
 
 import datetime
 
+def compute_downsampling_budget(input_res, min_output_size=8):
+    return math.floor(math.log2(input_res / min_output_size))
 
 def print_current_trial(study, trial):
     trial_info = {
@@ -98,10 +110,13 @@ def objective(trial, dataset_name="flowers"):
             metadata = json.load(f)
 
         # Fidelity dimension: resolution reduction factor
-        resize_factor = 0.3
+        resize_factor = 0.5 # half of the resolution
         original_res = metadata["image_resolution"]
         new_res = (int(original_res[0] * resize_factor), int(original_res[1] * resize_factor))
 
+        # Compute downsampling budget based on resized resolution
+        target_min_output_size = 8  
+        ds_budget = compute_downsampling_budget(min(new_res), target_min_output_size)
 
         # Load dataset and split train/val
         project_root = Path(__file__).resolve().parents[2]
@@ -125,7 +140,7 @@ def objective(trial, dataset_name="flowers"):
 
         # Model initialization
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        blocks, dropout, pool_type = define_search_space(trial)
+        blocks, dropout, pool_type = define_search_space(trial, ds_budget=ds_budget)
         model = build_model_from_config(blocks, dropout, pool_type,
                                         num_classes=metadata["num_classes"], 
                                         input_resolution=new_res)   
