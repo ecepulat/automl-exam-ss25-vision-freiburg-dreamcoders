@@ -54,9 +54,10 @@ def print_current_trial(study, trial):
     }
 
     # Optional print to console
-    print(f"\n🧪 [Trial {trial.number}] Value: {trial.value:.4f}")
-    print(f"  → Parameters: {trial.params}")
-    print(f"  → Best so far: Trial {study.best_trial.number} (value: {study.best_trial.value:.4f})")
+    if(trial.value is not None):
+        print(f"\n🧪 [Trial {trial.number}] Value: {trial.value:.4f}")
+        print(f"  → Parameters: {trial.params}")
+        print(f"  → Best so far: Trial {study.best_trial.number} (value: {study.best_trial.value:.4f})")
 
     # Save safely to JSON log
     log_path = f"trial_logs_{study.study_name}.json"
@@ -82,90 +83,93 @@ def objective(trial, dataset_name="flowers"):
     """
 
 
+    try:
+        trial_start_time = time.time()
+        # Analyze and fetch metadata
+        analyze_dataset(dataset_name)
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        metadata_path = os.path.join(project_root, f"dataset_analysis_{dataset_name}.json")
 
-    trial_start_time = time.time()
-    # Analyze and fetch metadata
-    analyze_dataset(dataset_name)
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    metadata_path = os.path.join(project_root, f"dataset_analysis_{dataset_name}.json")
+        if not os.path.exists(metadata_path):
+            raise FileNotFoundError(f"[ERROR] Metadata file not found: {metadata_path}")
 
-    if not os.path.exists(metadata_path):
-        raise FileNotFoundError(f"[ERROR] Metadata file not found: {metadata_path}")
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
 
-    with open(metadata_path, "r") as f:
-        metadata = json.load(f)
+        # Fidelity dimension: resolution reduction factor
+        resize_factor = 0.3
+        original_res = metadata["image_resolution"]
+        new_res = (int(original_res[0] * resize_factor), int(original_res[1] * resize_factor))
+        metadata["image_resolution"] = new_res
 
-    # Fidelity dimension: resolution reduction factor
-    resize_factor = 0.3
-    original_res = metadata["image_resolution"]
-    new_res = (int(original_res[0] * resize_factor), int(original_res[1] * resize_factor))
-    metadata["image_resolution"] = new_res
+        # Load dataset and split train/val
+        project_root = Path(__file__).resolve().parents[2]
+        base_path = project_root / "data" / dataset_name
+        df = pd.read_csv(os.path.join(base_path, "train.csv"))
+        images_path = os.path.join(base_path, "images_train")
 
-    # Load dataset and split train/val
-    project_root = Path(__file__).resolve().parents[2]
-    base_path = project_root / "data" / dataset_name
-    df = pd.read_csv(os.path.join(base_path, "train.csv"))
-    images_path = os.path.join(base_path, "images_train")
+        train_df, val_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
 
-    train_df, val_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
+        # Train dataset with augmentations
+        train_dataset = BalancedDataset(train_df, images_path, metadata)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
-    # Train dataset with augmentations
-    train_dataset = BalancedDataset(train_df, images_path, metadata)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        # Validation dataset (no augmentation, just normalization)
+        val_transform = get_default_transforms(metadata)
+        val_dataset = [
+            (val_transform(Image.open(os.path.join(images_path, row["image_file_name"])).convert("RGB")),
+            int(row["label"]))
+            for _, row in val_df.iterrows()
+        ]
+        val_loader = DataLoader(val_dataset, batch_size=32)
 
-    # Validation dataset (no augmentation, just normalization)
-    val_transform = get_default_transforms(metadata)
-    val_dataset = [
-        (val_transform(Image.open(os.path.join(images_path, row["image_file_name"])).convert("RGB")),
-         int(row["label"]))
-        for _, row in val_df.iterrows()
-    ]
-    val_loader = DataLoader(val_dataset, batch_size=32)
+        # Model initialization
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        blocks, dropout, pool_type = define_search_space(trial)
+        model = build_model_from_config(blocks, dropout, pool_type,
+                                        num_classes=metadata["num_classes"], 
+                                        input_resolution=metadata["image_resolution"])   
+    
+        model = model.to(device)
 
-    # Model initialization
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    blocks, dropout, pool_type = define_search_space(trial)
-    model = build_model_from_config(blocks, dropout, pool_type,
-                                     num_classes=metadata["num_classes"], 
-                                     input_resolution=metadata["image_resolution"])   
-   
-    model = model.to(device)
+        optimizer = optim.Adam(model.parameters(), lr=trial.suggest_float("lr", 1e-5, 1e-3, log=True))
+        criterion = nn.CrossEntropyLoss()
+        
+        # Training loop (5 epochs)
+        for epoch in range(6):
+            start = time.time()
+            print(f"trial : {trial.number} epoch : {epoch}")
+            model.train()
+            for images, labels in train_loader:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
 
-    optimizer = optim.Adam(model.parameters(), lr=trial.suggest_float("lr", 1e-5, 1e-3, log=True))
-    criterion = nn.CrossEntropyLoss()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            print(f"⏱️ Epoch {epoch} duration: {time.time() - start:.2f}s")
+            trial.report(loss.item(), epoch)
+            #if trial.should_prune():
+                #raise optuna.TrialPruned()
 
-    # Training loop (5 epochs)
-    for epoch in range(6):
-        start = time.time()
-        print(f"trial : {trial.number} epoch : {epoch}")
-        model.train()
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+        # Validation evaluation
+        model.eval()
+        correct, total = 0, 0
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                preds = outputs.argmax(1)
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        print(f"⏱️ Epoch {epoch} duration: {time.time() - start:.2f}s")
-        trial.report(loss.item(), epoch)
-        #if trial.should_prune():
-            #raise optuna.TrialPruned()
-
-    # Validation evaluation
-    model.eval()
-    correct, total = 0, 0
-    with torch.no_grad():
-        for images, labels in val_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            preds = outputs.argmax(1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
-
-    accuracy = correct / total
-    trial.duration = time.time() - trial_start_time
-    return 1 - accuracy
+        accuracy = correct / total
+        trial.duration = time.time() - trial_start_time
+        return 1 - accuracy
+    except Exception as e:
+        print(f"[⚠️ Trial {trial.number}] Failed with error:\n{traceback.format_exc()}")
+        raise optuna.exceptions.TrialPruned()
 
 
 def save_best_config(study, dataset_name):
