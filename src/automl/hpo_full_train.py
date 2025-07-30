@@ -25,7 +25,7 @@ import optuna
 
 
 class QuickTrain:
-    def __init__(self, dataset_name="flowers", batch_size=32, epochs=6, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4):
+    def __init__(self, dataset_name="flowers", batch_size=32, epochs=6, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam"):
         self.dataset_name = dataset_name
         self.batch_size = batch_size
         self.epochs = epochs
@@ -35,6 +35,7 @@ class QuickTrain:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.min_samples_per_class = min_samples_per_class
         self.LOG_FILE = "hpo_all_trials.log"
+
         with open(self.LOG_FILE, "w") as f:
             f.write(f"📝 Training Log for {self.model_name} on {self.dataset_name}\n\n")
 
@@ -42,7 +43,7 @@ class QuickTrain:
         self._load_metadata()
         self._prepare_data()
         self._init_model()
-
+        self.optimizer = self._init_optimizer(optimizer_name)
         params = sum(p.numel() for p in self.model.parameters())
         with open(self.LOG_FILE, "a") as f:
             f.write(f"📏 Total Parameters: {params}\n")
@@ -50,7 +51,7 @@ class QuickTrain:
             f.write(f"  • Learning Rate: 1e-4\n")
             f.write(f"  • Epochs: {self.epochs}\n")
             f.write(f"  • Batch Size: {self.batch_size}\n")
-            f.write(f"  • Optimizer: Adam\n")
+            f.write(f"  • Optimizer: {self.optimizer}\n")
             f.write(f"  • Loss Function: CrossEntropyLoss\n\n")
 
     def _load_metadata(self):
@@ -60,6 +61,19 @@ class QuickTrain:
             self.metadata = analyze_dataset(self.dataset_name, save_to_file=True, min_samples_per_class=150)
         with open(path, "r") as f:
             self.metadata = json.load(f)
+
+
+    def _init_optimizer(self, optimizer_name):
+        if optimizer_name == "Adam":
+            return torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        elif optimizer_name == "SGD":
+            return torch.optim.SGD(self.model.parameters(), lr=self.learning_rate, momentum=0.9)
+        elif optimizer_name == "RMSprop":
+            return torch.optim.RMSprop(self.model.parameters(), lr=self.learning_rate)
+        elif optimizer_name == "AdamW":
+            return torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate)
+        else:
+            raise ValueError(f"Unknown optimizer: {optimizer_name}")
 
     def _prepare_data(self):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", self.dataset_name))
@@ -123,7 +137,6 @@ class QuickTrain:
         ).to(self.device)
 
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)  # UPDATED
 
     def evaluate_test(self):
         print("🧪 Evaluating on test set...")
@@ -223,9 +236,9 @@ def objective(trial):
     print("this is trial")
     min_samples = trial.suggest_int("min_samples_per_class", 150, 400)
     batch_size = trial.suggest_categorical("batch_size", [16, 32])
-    
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "RMSprop", "AdamW"])
     learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
-    epochs = 6
+    epochs = 10
     print(f"🔎 Trial {trial.number} trying: min_samples={min_samples}, batch_size={batch_size}, epochs={epochs}, learning_rate={learning_rate:.2e}")
 
     try:
@@ -239,7 +252,7 @@ def objective(trial):
             epochs = epochs,
 
             learning_rate=learning_rate,  # <-- pass to class
-            log_path=shared_log_file  # 👈 shared log
+            optimizer_name = optimizer_name
         )
         trainer.train()
         acc = trainer.evaluate_test()
@@ -251,7 +264,12 @@ def objective(trial):
 
 
 if __name__ == "__main__":
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(
+    direction="maximize",
+    study_name="optuna_hpo_flowers",
+    storage="sqlite:///optuna_hpo_flowers.db",
+    load_if_exists=True
+)
     study.optimize(objective, n_trials=20)
 
     print("\n✅ Best trial:")
@@ -274,7 +292,8 @@ if __name__ == "__main__":
         min_samples_per_class=study.best_trial.params["min_samples_per_class"],
         batch_size=study.best_trial.params["batch_size"],
         epochs = epochs,
-        learning_rate=study.best_trial.params["learning_rate"]
+        learning_rate=study.best_trial.params["learning_rate"],
+        optimizer_name= study.best_trial.params["optimizer"]
     )
     final_trainer.train()
     final_trainer.evaluate_test()
