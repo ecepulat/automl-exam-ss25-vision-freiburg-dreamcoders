@@ -1,0 +1,5 @@
+Best Trial #0
+Validation Accuracy: 0.0000
+min_samples_per_class: 254
+batch_size: 32
+learning_rate: 1.4754673747979521e-05

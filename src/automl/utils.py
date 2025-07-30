@@ -2,7 +2,7 @@ from typing import Any
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.transforms import TrivialAugmentWide
-
+from torchvision.transforms import RandAugment
 
 def calculate_mean_std(dataset_class: Any):
     """Calculate the mean and standard deviation of the entire image dataset."""
@@ -66,7 +66,7 @@ def get_default_transforms(meta, resized_res=None):
     ])
 
 
-def get_augmented_transforms(meta, resized_res=None):
+def get_augmented_transforms(meta, resized_res=None, augment_type="trivial"):
     """
     Returns a transform pipeline that includes TrivialAugmentWide for data augmentation.
 
@@ -93,9 +93,21 @@ def get_augmented_transforms(meta, resized_res=None):
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
 
-    return transforms.Compose([
-        transforms.Resize(image_size),
-        TrivialAugmentWide(num_magnitude_bins=31),
+    augment_ops = [transforms.Resize(image_size)]
+
+    if augment_type == "trivial":
+        from torchvision.transforms import TrivialAugmentWide
+        augment_ops.append(TrivialAugmentWide(num_magnitude_bins=31))
+    elif augment_type == "rand":
+        from torchvision.transforms import RandAugment
+        augment_ops.append(RandAugment())
+    elif augment_type == "none":
+        pass  # no augmentation
+
+    augment_ops.extend([
         transforms.ToTensor(),
         normalize
     ])
+
+    return transforms.Compose(augment_ops)
+

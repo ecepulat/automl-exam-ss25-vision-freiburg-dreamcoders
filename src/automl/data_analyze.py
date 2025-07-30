@@ -59,13 +59,11 @@ class AutoMLDataset(Dataset):
             "class_distribution": self.get_class_distribution()
         }
         
-
-def analyze_dataset(dataset_name: str, save_to_file: bool = True):
-
+def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_per_class: int = 150):
     project_root = Path(__file__).resolve().parents[2]
     dataset_path = project_root / "data" / dataset_name
-    print(dataset_path)
-
+    #print(f"📂 Dataset Path: {dataset_path}")
+    print(f"min num per class analyze_dataset: {min_samples_per_class}")
     # Load CSV
     csv_path = os.path.join(dataset_path, "train.csv")
     img_dir = os.path.join(dataset_path, "images_train")
@@ -85,7 +83,7 @@ def analyze_dataset(dataset_name: str, save_to_file: bool = True):
     mean_freq = round(float(np.mean(freq_values)), 6)
     median_freq = round(float(np.median(freq_values)), 6)
 
-    # One image to get resolution and channels
+    # Image shape info
     first_img_path = os.path.join(img_dir, image_files[0])
     with Image.open(first_img_path) as img:
         width, height = img.size
@@ -104,60 +102,74 @@ def analyze_dataset(dataset_name: str, save_to_file: bool = True):
         },
         "mean_class_frequency": mean_freq,
         "median_class_frequency": median_freq,
-        "is_imbalanced": None,  # will be decided below
-        "undersampled_classes": {}  # will be filled later
+        "is_imbalanced": None,
+        "undersampled_classes": {}
     }
 
-    print("\U0001F4CA Dataset Metadata:")
-    #print(json.dumps(metadata, indent=2))
+    print("\n📊 Dataset Metadata Loaded.")
+
+    # Analyze imbalance and undersampling
+    check_imbalance(metadata)
+    metadata["undersampled_classes"] = get_undersampled_classes(
+        metadata["class_counts"],
+        min_samples_per_class=min_samples_per_class
+    )
+
+    if save_to_file:
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        filename = os.path.join(root_dir, f"dataset_analysis_{dataset_name}.json")
+        with open(filename, "w") as f:
+            json.dump(metadata, f, indent=2)
+        print(f"\n✅ Updated metadata with undersampled class info saved to: {filename}")
 
     return metadata
+
 
 imbalance_votes = []
 
 def compute_entropy(class_probs):
     entropy = -np.sum([p * np.log2(p) for p in class_probs if p > 0])
     max_entropy = np.log2(len(class_probs))
-    print(f"[Entropy] Value: {entropy:.4f} / Max: {max_entropy:.4f}")
+    #print(f"[Entropy] Value: {entropy:.4f} / Max: {max_entropy:.4f}")
     result = entropy < 0.75 * max_entropy
     imbalance_votes.append(result)
-    print("🔴 Entropy suggests class imbalance" if result else "🟢 Entropy suggests reasonably balanced")
+    #print("🔴 Entropy suggests class imbalance" if result else "🟢 Entropy suggests reasonably balanced")
 
 def compute_gini(class_probs):
     gini = 1 - np.sum([p ** 2 for p in class_probs])
     max_gini = 1 - (1 / len(class_probs))
-    print(f"[Gini Index] Value: {gini:.4f} / Max: {max_gini:.4f}")
+    #print(f"[Gini Index] Value: {gini:.4f} / Max: {max_gini:.4f}")
     result = gini < 0.75 * max_gini
     imbalance_votes.append(result)
-    print("🔴 Gini suggests class imbalance" if result else "🟢 Gini suggests reasonably balanced")
+    #print("🔴 Gini suggests class imbalance" if result else "🟢 Gini suggests reasonably balanced")
 
 def compute_skewness(class_probs, total_samples):
     counts = np.array([p * total_samples for p in class_probs])
     skew_val = skew(counts)
-    print(f"[Skewness] Value: {skew_val:.4f}")
+    #print(f"[Skewness] Value: {skew_val:.4f}")
     result = abs(skew_val) > 1
     imbalance_votes.append(result)
-    print("🔴 Skewness suggests imbalance (heavy-tailed)" if result else "🟢 Skewness is acceptable")
+    #print("🔴 Skewness suggests imbalance (heavy-tailed)" if result else "🟢 Skewness is acceptable")
 
 def compute_kmeans_clustering(class_probs):
     X = np.array(class_probs).reshape(-1, 1)
     kmeans = KMeans(n_clusters=2, random_state=42, n_init='auto').fit(X)
     counts = np.bincount(kmeans.labels_)
     ratio = min(counts) / max(counts)
-    print(f"[KMeans Clustering] Cluster ratio: {ratio:.4f}")
+    #print(f"[KMeans Clustering] Cluster ratio: {ratio:.4f}")
     result = ratio < 0.3
     imbalance_votes.append(result)
-    print("🔴 KMeans found a dominant vs minority class split" if result else "🟢 KMeans found no clear imbalance clusters")
+    #print("🔴 KMeans found a dominant vs minority class split" if result else "🟢 KMeans found no clear imbalance clusters")
 
 def detect_outliers_isolation_forest(class_probs):
     X = np.array(class_probs).reshape(-1, 1)
     clf = IsolationForest(contamination=0.1, random_state=42).fit(X)
     outlier_flags = clf.predict(X)  # -1: outlier, 1: inlier
     n_outliers = np.sum(outlier_flags == -1)
-    print(f"[Isolation Forest] Detected {n_outliers} minority class(es) as outliers")
+    #print(f"[Isolation Forest] Detected {n_outliers} minority class(es) as outliers")
     result = n_outliers > len(class_probs) * 0.05
     imbalance_votes.append(result)
-    print("🔴 Isolation Forest indicates possible imbalance" if result else "🟢 No major outliers detected")
+    #print("🔴 Isolation Forest indicates possible imbalance" if result else "🟢 No major outliers detected")
 
 def check_imbalance(metadata):
     print(f"\n📊 Checking imbalance for dataset: {metadata['dataset']}")
@@ -173,7 +185,7 @@ def check_imbalance(metadata):
     detect_outliers_isolation_forest(class_probs)
 
     metadata['is_imbalanced'] = imbalance_votes.count(True) >= 3
-    print(f"\n📌 Final Decision: {'🔴 Imbalanced' if metadata['is_imbalanced'] else '🟢 Balanced'}")
+    #print(f"\n📌 Final Decision: {'🔴 Imbalanced' if metadata['is_imbalanced'] else '🟢 Balanced'}")
 
 def calculate_median_margin(class_counts):
     """
@@ -181,8 +193,7 @@ def calculate_median_margin(class_counts):
     """
     # If class_counts contains dicts, extract 'current_count'
     sample_values = list(class_counts.values())
-    for v in sample_values:
-        print("🔍 Type:", type(v), "| Value:", v)
+  
     if isinstance(sample_values[0], dict):
         counts = np.array([v["current_count"] for v in sample_values])
     else:
@@ -212,23 +223,3 @@ def get_undersampled_classes(class_counts, min_samples_per_class):
     return undersampled
 
 
-
-if __name__ == "__main__":
-    metadata = analyze_dataset("flowers", save_to_file=False)  # <-- disable early save
-    check_imbalance(metadata)
-
-    undersampled_info = get_undersampled_classes(metadata["class_counts"], min_samples_per_class=200)
-    metadata["undersampled_classes"] = undersampled_info
-
-    print("🔍 Undersampled Classes Detected:")
-    #for cls, info in undersampled_info.items():
-       # print(f"Class {cls}: {info['current_count']} ➡ {info['target_count']} (×{info['augmentation_multiplier']})")
-
-    # ✅ Now save the updated version
-    # Save it to root of project
-    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    filename = os.path.join(root_dir, f"dataset_analysis_{metadata['dataset']}.json")
-
-    with open(filename, "w") as f:
-        json.dump(metadata, f, indent=2)
-    print(f"✅ Updated metadata with undersampled class info saved to {filename}")
