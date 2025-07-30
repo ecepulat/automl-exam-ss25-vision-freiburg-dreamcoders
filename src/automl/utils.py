@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any 
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.transforms import TrivialAugmentWide
@@ -48,10 +48,10 @@ def get_default_transforms(meta, resized_res=None):
     image_size = resized_res if resized_res is not None else meta["image_resolution"]
     num_channels = meta["num_channels"]
 
-    if resized_res is not None:
-        print(f"get_default_transforms image reso is downsized from {meta["image_resolution"]} to {resized_res}")
+    if resized_res is not None: # just fix the f-string syntax so Python doesn't break
+        print(f"get_default_transforms image reso is downsized from {meta['image_resolution']} to {resized_res}")
     else:
-        print(f"get_default_transforms image reso is not downsized {meta["image_resolution"]}")
+        print(f"get_default_transforms image reso is not downsized {meta['image_resolution']}")
 
     if num_channels == 1:
         normalize = transforms.Normalize((0.5,), (0.5,))
@@ -80,12 +80,12 @@ def get_augmented_transforms(meta, resized_res=None):
     """
 
     image_size = resized_res if resized_res is not None else meta["image_resolution"]
-
     num_channels = meta["num_channels"]
+
     if resized_res is not None:
-        print(f"get_augmented_transforms image reso is downsized from {meta["image_resolution"]} to {resized_res}")
+        print(f"get_augmented_transforms image reso is downsized from {meta['image_resolution']} to {resized_res}")
     else:
-        print(f"get_augmented_transforms image reso is not downsized {meta["image_resolution"]}")
+        print(f"get_augmented_transforms image reso is not downsized {meta['image_resolution']}")
 
     if num_channels == 1:
         normalize = transforms.Normalize((0.5,), (0.5,))

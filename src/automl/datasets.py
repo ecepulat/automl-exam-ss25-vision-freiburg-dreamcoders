@@ -181,5 +181,7 @@ class FashionDataset(BaseVisionDataset):
     def _check_integrity(self) -> bool:
         return True  # override temporarily to skip the check
 
-
-
+# This will download and extract all datasets into the "data/" directory if not exists
+EmotionsDataset(root="data", download=True)
+FlowersDataset(root="data", download=True)
+FashionDataset(root="data", download=True)

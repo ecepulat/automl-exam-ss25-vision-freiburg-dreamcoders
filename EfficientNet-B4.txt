@@ -1,0 +1,12 @@
+📝 EfficientNet-B4 Training Log
+
+📏 Total Parameters: 17731502
+🛠️ Hyperparameters:
+  • Learning Rate: 1e-4
+  • Epochs: 6
+  • Batch Size: 25
+  • Optimizer: Adam
+  • Loss Function: CrossEntropyLoss
+
+🖥️ GPU: NVIDIA GeForce RTX 4090 | Memory: 23.53 GB
+
