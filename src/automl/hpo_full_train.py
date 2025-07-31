@@ -235,7 +235,9 @@ class QuickTrain:
 
             acc = total_correct / len(self.train_loader.dataset)
             avg_loss = total_loss / len(self.train_loader.dataset)
+            #Loss: This is the average training loss over all batches in that epoch
             print(f"📦 Epoch {epoch+1}: Loss={avg_loss:.4f}, Accuracy={acc:.4f}")
+            #This is the training accuracy
             train_acc_list.append(acc)
             train_loss_list.append(avg_loss)
 
@@ -283,7 +285,6 @@ def objective(trial):
     print(f"🔎 Trial {trial.number} trying: min_samples={min_samples}, batch_size={batch_size}, epochs={epochs}, learning_rate={learning_rate:.2e}")
 
     try:
-        shared_log_file = "hpo_optuna_trials_shared.log"
         trainer = QuickTrain(
             dataset_name="flowers",
             model_name=f"optuna_trial_{trial.number}",
