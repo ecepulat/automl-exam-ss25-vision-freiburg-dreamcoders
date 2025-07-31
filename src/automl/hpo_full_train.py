@@ -17,13 +17,14 @@ import sys
 import subprocess
 import time
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from collections import Counter
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import classification_report
 from utils import get_default_transforms
 import optuna
 
 
-
+import json
 class QuickTrain:
     def __init__(self, dataset_name="flowers", batch_size=32, epochs=6, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam"):
         self.dataset_name = dataset_name
@@ -36,7 +37,7 @@ class QuickTrain:
         self.min_samples_per_class = min_samples_per_class
         self.LOG_FILE = "hpo_all_trials.log"
 
-        with open(self.LOG_FILE, "w") as f:
+        with open(self.LOG_FILE, "a") as f:
             f.write(f"📝 Training Log for {self.model_name} on {self.dataset_name}\n\n")
 
         analyze_dataset(self.dataset_name, min_samples_per_class=self.min_samples_per_class)
@@ -75,21 +76,60 @@ class QuickTrain:
         else:
             raise ValueError(f"Unknown optimizer: {optimizer_name}")
 
+    
     def _prepare_data(self):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", self.dataset_name))
+        
+        # Load CSVs
         df = pd.read_csv(os.path.join(base_path, "train.csv"))
         test_df = pd.read_csv(os.path.join(base_path, "test.csv"))
         images_path = os.path.join(base_path, "images_train")
         test_images_path = os.path.join(base_path, "images_test")
 
-        train_dataset = BalancedDataset(df, images_path, self.metadata)
+        # Step 1: Balance the training data
+        full_train_dataset = BalancedDataset(df, images_path, self.metadata)
+        balanced_df = full_train_dataset.df  # This is already balanced
+
+        # Step 2: Train/Validation split
+        train_df, val_df = train_test_split(
+            balanced_df,
+            test_size=0.2,
+            stratify=balanced_df["label"],
+            random_state=42
+        )
+
+        # Step 3: Create BalancedDataset objects
+        train_dataset = BalancedDataset(train_df, images_path, self.metadata)
+        val_dataset = BalancedDataset(val_df, images_path, self.metadata)
+
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
-        print(f" Training on {len(self.train_loader.dataset)} samples.")
+        self.val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+
+        # Step 4: Prepare fixed test set (for final evaluation only)
         test_transform = get_default_transforms(self.metadata)
-        self.test_loader = DataLoader([
+        test_data = [
             (test_transform(Image.open(os.path.join(test_images_path, row['image_file_name'])).convert("RGB")), int(row['label']))
             for _, row in test_df.iterrows()
-        ], batch_size=self.batch_size)
+        ]
+        self.test_loader = DataLoader(test_data, batch_size=self.batch_size, shuffle=False)
+
+        print(f"🧪 Training on {len(self.train_loader.dataset)} samples. Validation on {len(self.val_loader.dataset)} samples.")
+    def evaluate_val(self):
+        print("🧪 Evaluating on validation set...")
+        self.model.eval()
+        all_preds, all_labels = [], []
+
+        with torch.no_grad():
+            for images, labels in self.val_loader:
+                images, labels = images.to(self.device), labels.to(self.device)
+                outputs = self.model(images)
+                preds = outputs.argmax(1)
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+
+        acc = np.mean(np.array(all_preds) == np.array(all_labels))
+        print(f"✅ Validation Accuracy: {acc:.4f}")
+        return acc
 
     def _get_best_custom_config(self):
         with open(self.config_path, "r") as f:
@@ -155,13 +195,7 @@ class QuickTrain:
         print(f"✅ Test Accuracy: {acc:.4f}")
 
         report = classification_report(all_labels, all_preds, digits=4)
-        cm = confusion_matrix(all_labels, all_preds)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        disp.plot(xticks_rotation=90, cmap="Blues", values_format="d")
-        plt.title("Confusion Matrix")
-        plt.tight_layout()
-        plt.savefig(f"{self.model_name}_{self.dataset_name}_confusion_matrix.png")
-        plt.close()
+
 
         with open(self.LOG_FILE, "a") as f:
             f.write(f"\n✅ Test Accuracy: {acc:.4f}\n")
@@ -220,7 +254,6 @@ class QuickTrain:
         total_time = time.time() - start_time
         with open(self.LOG_FILE, "a") as f:
             f.write(f"\n⏱️ Total Training Time: {total_time:.2f} seconds\n")
-        torch.save(self.model.state_dict(), f"{self.model_name}_{self.dataset_name}_final_model.pth")
         plt.figure()
         plt.plot(range(1, self.epochs + 1), train_acc_list, label="Accuracy")
         plt.plot(range(1, self.epochs + 1), train_loss_list, label="Loss")
@@ -230,6 +263,14 @@ class QuickTrain:
         plt.legend()
         plt.savefig(f"{self.model_name}_{self.dataset_name}_convergence.png")
         plt.close()
+def load_hpo_params(json_path):
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    # If it's from Optuna (wrapped under "params"), unwrap
+    if "params" in data:
+        return data["params"]
+    return data  # Already flat dict
 
 def objective(trial):
     # Sample hyperparameters
@@ -255,7 +296,7 @@ def objective(trial):
             optimizer_name = optimizer_name
         )
         trainer.train()
-        acc = trainer.evaluate_test()
+        acc = trainer.evaluate_val()
         print(f"✅ Trial {trial.number} finished with accuracy: {acc:.4f}")
         return acc
     except Exception as e:
@@ -263,25 +304,83 @@ def objective(trial):
         return 0.0
 
 
+def compare_configs(default_path="default_hpo_params.json", optuna_path="hpo_best_trial_params.json"):
+    results = []
+
+    # Config 1: Default manual HPO
+    default_params = load_hpo_params(default_path)
+    trainer_default = QuickTrain(
+        dataset_name="flowers",
+        model_name="manual_best_config",
+        config_path="trial_logs_optuna_search_flowers.json",
+        min_samples_per_class=default_params["min_samples_per_class"],
+        batch_size=default_params["batch_size"],
+        epochs=30,
+        learning_rate=default_params["learning_rate"],
+        optimizer_name=default_params["optimizer"]
+    )
+    trainer_default.train()
+    acc_default = trainer_default.evaluate_test()
+    results.append(("Manual Best Config", acc_default))
+
+    # Config 2: Optuna best trial
+    optuna_params = load_hpo_params(optuna_path)
+    trainer_optuna = QuickTrain(
+        dataset_name="flowers",
+        model_name="optuna_best_config",
+        config_path="trial_logs_optuna_search_flowers.json",
+        min_samples_per_class=optuna_params["min_samples_per_class"],
+        batch_size=optuna_params["batch_size"],
+        epochs=30,
+        learning_rate=optuna_params["learning_rate"],
+        optimizer_name=optuna_params["optimizer"]
+    )
+    trainer_optuna.train()
+    acc_optuna = trainer_optuna.evaluate_test()
+    results.append(("Optuna Best Trial", acc_optuna))
+
+    # Summary log
+    print("\n🔍 Test Accuracy Comparison:")
+    print("{:<25} {:>10}".format("Configuration", "Test Acc"))
+    for name, acc in results:
+        print("{:<25} {:>10.4f}".format(name, acc))
+
+    with open("comparison_summary.txt", "w") as f:
+        f.write("Test Accuracy Comparison:\n")
+        f.write("{:<25} {:>10}\n".format("Configuration", "Test Acc"))
+        for name, acc in results:
+            f.write("{:<25} {:>10.4f}\n".format(name, acc))
+
+
+
 if __name__ == "__main__":
+#============= HPO DISABLED ================
+    compare_configs()
+
+
+#============== HPO CODE ====================
+    """
     study = optuna.create_study(
     direction="maximize",
     study_name="optuna_hpo_flowers",
     storage="sqlite:///optuna_hpo_flowers.db",
     load_if_exists=True
 )
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, timeout=6 * 60 * 60)  # 6 hours in seconds
 
     print("\n✅ Best trial:")
+  
+    with open("hpo_best_trial_params.json", "w") as f:
+        json.dump({
+            "trial_number": study.best_trial.number,
+            "value": study.best_trial.value,
+            "params": study.best_trial.params
+        }, f, indent=2)
     print(f"Trial #{study.best_trial.number}")
     print(f"  Value: {study.best_trial.value:.4f}")
     for key, value in study.best_trial.params.items():
         print(f"  {key}: {value}")
-    with open("hpo_final_run_summary.txt", "w") as f:
-        f.write(f"Best Trial #{study.best_trial.number}\n")
-        f.write(f"Validation Accuracy: {study.best_trial.value:.4f}\n")
-        for key, value in study.best_trial.params.items():
-            f.write(f"{key}: {value}\n")
+    
     # 🏁 Final training with best parameters
     print("\n🚀 Retraining final model with best parameters...")
     epochs = 20
@@ -297,3 +396,4 @@ if __name__ == "__main__":
     )
     final_trainer.train()
     final_trainer.evaluate_test()
+"""
