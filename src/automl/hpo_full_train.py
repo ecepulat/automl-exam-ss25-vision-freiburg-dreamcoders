@@ -26,7 +26,7 @@ import optuna
 
 import json
 class QuickTrain:
-    def __init__(self, dataset_name="flowers", batch_size=32, epochs=6, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam"):
+    def __init__(self, dataset_name="flowers", batch_size=32, epochs=6, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0):
         self.dataset_name = dataset_name
         self.batch_size = batch_size
         self.epochs = epochs
@@ -45,6 +45,7 @@ class QuickTrain:
         self._prepare_data()
         self._init_model()
         self.optimizer = self._init_optimizer(optimizer_name)
+        self.weight_decay = weight_decay  # passed in from trial
         params = sum(p.numel() for p in self.model.parameters())
         with open(self.LOG_FILE, "a") as f:
             f.write(f"📏 Total Parameters: {params}\n")
@@ -63,7 +64,7 @@ class QuickTrain:
         with open(path, "r") as f:
             self.metadata = json.load(f)
 
-
+    """
     def _init_optimizer(self, optimizer_name):
         if optimizer_name == "Adam":
             return torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
@@ -75,6 +76,17 @@ class QuickTrain:
             return torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate)
         else:
             raise ValueError(f"Unknown optimizer: {optimizer_name}")
+        """
+
+    def _init_optimizer(self, optimizer_name):
+        kwargs = dict(lr=self.learning_rate, weight_decay=getattr(self, "weight_decay", 0.0))
+        if optimizer_name == "Adam":
+            return torch.optim.Adam(self.model.parameters(), **kwargs)
+        elif optimizer_name == "AdamW":
+            return torch.optim.AdamW(self.model.parameters(), **kwargs)
+        else:
+            raise ValueError(f"Unknown optimizer: {optimizer_name}")
+
 
     
     def _prepare_data(self):
@@ -271,7 +283,7 @@ def load_hpo_params(json_path):
     if "params" in data:
         return data["params"]
     return data  # Already flat dict
-
+"""
 def objective(trial):
     # Sample hyperparameters
     print("this is trial")
@@ -302,11 +314,53 @@ def objective(trial):
     except Exception as e:
         print(f"❌ Trial {trial.number} failed with exception: {e}")
         return 0.0
+    """
+def objective(trial):
+    # 1. Restrict optimizer choices based on CV domain knowledge
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "AdamW"])
+
+    # 2. Learning rate ranges tailored for Adam/AdamW
+    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+
+    # 3. Weight decay for regularization
+    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
+
+    # 4. Other relevant HPO parameters
+    min_samples = trial.suggest_int("min_samples_per_class", 150, 400)
+    batch_size = trial.suggest_categorical("batch_size", [16, 32])
+
+    # 5. Longer training to improve accuracy signal
+    epochs = 20
+
+    print(f"🔎 Trial {trial.number} trying: optimizer={optimizer_name}, lr={learning_rate:.2e}, weight_decay={weight_decay:.1e}, min_samples={min_samples}, batch_size={batch_size}")
+
+    try:
+        trainer = QuickTrain(
+            dataset_name="flowers",
+            model_name=f"optuna_trial_{trial.number}",
+            config_path="trial_logs_optuna_search_flowers.json",
+            min_samples_per_class=min_samples,
+            batch_size=batch_size,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            optimizer_name=optimizer_name
+        )
+
+        # Inject weight decay into optimizer (requires modifying _init_optimizer)
+        trainer.optimizer.param_groups[0]['weight_decay'] = weight_decay
+
+        trainer.train()
+        acc = trainer.evaluate_val()
+        print(f"✅ Trial {trial.number} finished with accuracy: {acc:.4f}")
+        return acc
+    except Exception as e:
+        print(f"❌ Trial {trial.number} failed with exception: {e}")
+        return 0.0
 
 
 def compare_configs(default_path="default_hpo_params.json", optuna_path="hpo_best_trial_params.json"):
     results = []
-
+    """
     # Config 1: Default manual HPO
     default_params = load_hpo_params(default_path)
     trainer_default = QuickTrain(
@@ -322,7 +376,7 @@ def compare_configs(default_path="default_hpo_params.json", optuna_path="hpo_bes
     trainer_default.train()
     acc_default = trainer_default.evaluate_test()
     results.append(("Manual Best Config", acc_default))
-
+    """
     # Config 2: Optuna best trial
     optuna_params = load_hpo_params(optuna_path)
     trainer_optuna = QuickTrain(
@@ -339,6 +393,7 @@ def compare_configs(default_path="default_hpo_params.json", optuna_path="hpo_bes
     acc_optuna = trainer_optuna.evaluate_test()
     results.append(("Optuna Best Trial", acc_optuna))
 
+"""
     # Summary log
     print("\n🔍 Test Accuracy Comparison:")
     print("{:<25} {:>10}".format("Configuration", "Test Acc"))
@@ -350,50 +405,62 @@ def compare_configs(default_path="default_hpo_params.json", optuna_path="hpo_bes
         f.write("{:<25} {:>10}\n".format("Configuration", "Test Acc"))
         for name, acc in results:
             f.write("{:<25} {:>10.4f}\n".format(name, acc))
-
+"""
 
 
 if __name__ == "__main__":
-#============= HPO DISABLED ================
-    compare_configs()
 
+    # compare_configs()
+    # 🧪 HPO using Optuna
 
-#============== HPO CODE ====================
-    """
     study = optuna.create_study(
-    direction="maximize",
-    study_name="optuna_hpo_flowers",
-    storage="sqlite:///optuna_hpo_flowers.db",
-    load_if_exists=True
-)
-    study.optimize(objective, timeout=6 * 60 * 60)  # 6 hours in seconds
+        direction="maximize",
+        study_name="optuna_hpo_flowers",
+        storage="sqlite:///optuna_hpo_flowers.db",
+        load_if_exists=True
+    )
 
+    # 🔁 Warm-start Optuna with a strong baseline
+    study.enqueue_trial({
+        "min_samples_per_class": 200,
+        "batch_size": 32,
+        "optimizer": "Adam",
+        "learning_rate": 1e-4,
+        "weight_decay": 1e-4
+    })
+
+    # Start the HPO process
+    study.optimize(objective, timeout=6 * 60 * 60)  # Run for 6 hours
+
+    # ✅ Log the best trial
     print("\n✅ Best trial:")
-  
+    print(f"Trial #{study.best_trial.number}")
+    print(f"  Value: {study.best_trial.value:.4f}")
+    for key, value in study.best_trial.params.items():
+        print(f"  {key}: {value}")
+
+    # 💾 Save best parameters to file
     with open("hpo_best_trial_params.json", "w") as f:
         json.dump({
             "trial_number": study.best_trial.number,
             "value": study.best_trial.value,
             "params": study.best_trial.params
         }, f, indent=2)
-    print(f"Trial #{study.best_trial.number}")
-    print(f"  Value: {study.best_trial.value:.4f}")
-    for key, value in study.best_trial.params.items():
-        print(f"  {key}: {value}")
-    
+
     # 🏁 Final training with best parameters
     print("\n🚀 Retraining final model with best parameters...")
-    epochs = 20
     final_trainer = QuickTrain(
         dataset_name="flowers",
         model_name="final_best_model",
         config_path="trial_logs_optuna_search_flowers.json",
         min_samples_per_class=study.best_trial.params["min_samples_per_class"],
         batch_size=study.best_trial.params["batch_size"],
-        epochs = epochs,
+        epochs=30,  # more epochs for final training
         learning_rate=study.best_trial.params["learning_rate"],
-        optimizer_name= study.best_trial.params["optimizer"]
+        optimizer_name=study.best_trial.params["optimizer"],
+        weight_decay=study.best_trial.params["weight_decay"]
     )
     final_trainer.train()
     final_trainer.evaluate_test()
-"""
+
+

@@ -221,513 +221,513 @@
   "undersampled_classes": {
     "45": {
       "current_count": 137,
-      "target_count": 200,
-      "augmentation_multiplier": 1.46
+      "target_count": 389,
+      "augmentation_multiplier": 2.84
     },
     "74": {
       "current_count": 84,
-      "target_count": 200,
-      "augmentation_multiplier": 2.38
+      "target_count": 389,
+      "augmentation_multiplier": 4.63
     },
     "73": {
       "current_count": 120,
-      "target_count": 200,
-      "augmentation_multiplier": 1.67
+      "target_count": 389,
+      "augmentation_multiplier": 3.24
     },
     "4": {
       "current_count": 46,
-      "target_count": 200,
-      "augmentation_multiplier": 4.35
+      "target_count": 389,
+      "augmentation_multiplier": 8.46
     },
     "72": {
       "current_count": 136,
-      "target_count": 200,
-      "augmentation_multiplier": 1.47
+      "target_count": 389,
+      "augmentation_multiplier": 2.86
     },
     "56": {
       "current_count": 47,
-      "target_count": 200,
-      "augmentation_multiplier": 4.26
+      "target_count": 389,
+      "augmentation_multiplier": 8.28
     },
     "48": {
       "current_count": 34,
-      "target_count": 200,
-      "augmentation_multiplier": 5.88
+      "target_count": 389,
+      "augmentation_multiplier": 11.44
     },
     "76": {
       "current_count": 176,
-      "target_count": 200,
-      "augmentation_multiplier": 1.14
+      "target_count": 389,
+      "augmentation_multiplier": 2.21
     },
     "83": {
       "current_count": 60,
-      "target_count": 200,
-      "augmentation_multiplier": 3.33
+      "target_count": 389,
+      "augmentation_multiplier": 6.48
     },
     "57": {
       "current_count": 80,
-      "target_count": 200,
-      "augmentation_multiplier": 2.5
+      "target_count": 389,
+      "augmentation_multiplier": 4.86
     },
     "93": {
       "current_count": 113,
-      "target_count": 200,
-      "augmentation_multiplier": 1.77
+      "target_count": 389,
+      "augmentation_multiplier": 3.44
     },
     "65": {
       "current_count": 43,
-      "target_count": 200,
-      "augmentation_multiplier": 4.65
+      "target_count": 389,
+      "augmentation_multiplier": 9.05
     },
     "80": {
       "current_count": 116,
-      "target_count": 200,
-      "augmentation_multiplier": 1.72
+      "target_count": 389,
+      "augmentation_multiplier": 3.35
     },
     "52": {
       "current_count": 65,
-      "target_count": 200,
-      "augmentation_multiplier": 3.08
+      "target_count": 389,
+      "augmentation_multiplier": 5.98
     },
     "32": {
       "current_count": 32,
-      "target_count": 200,
-      "augmentation_multiplier": 6.25
+      "target_count": 389,
+      "augmentation_multiplier": 12.16
     },
     "79": {
       "current_count": 73,
-      "target_count": 200,
-      "augmentation_multiplier": 2.74
+      "target_count": 389,
+      "augmentation_multiplier": 5.33
     },
     "18": {
       "current_count": 34,
-      "target_count": 200,
-      "augmentation_multiplier": 5.88
+      "target_count": 389,
+      "augmentation_multiplier": 11.44
     },
     "3": {
       "current_count": 39,
-      "target_count": 200,
-      "augmentation_multiplier": 5.13
+      "target_count": 389,
+      "augmentation_multiplier": 9.97
     },
     "22": {
       "current_count": 64,
-      "target_count": 200,
-      "augmentation_multiplier": 3.12
+      "target_count": 389,
+      "augmentation_multiplier": 6.08
     },
     "97": {
       "current_count": 57,
-      "target_count": 200,
-      "augmentation_multiplier": 3.51
+      "target_count": 389,
+      "augmentation_multiplier": 6.82
     },
     "39": {
       "current_count": 47,
-      "target_count": 200,
-      "augmentation_multiplier": 4.26
+      "target_count": 389,
+      "augmentation_multiplier": 8.28
     },
     "21": {
       "current_count": 41,
-      "target_count": 200,
-      "augmentation_multiplier": 4.88
+      "target_count": 389,
+      "augmentation_multiplier": 9.49
     },
     "14": {
       "current_count": 34,
-      "target_count": 200,
-      "augmentation_multiplier": 5.88
+      "target_count": 389,
+      "augmentation_multiplier": 11.44
     },
     "36": {
       "current_count": 76,
-      "target_count": 200,
-      "augmentation_multiplier": 2.63
+      "target_count": 389,
+      "augmentation_multiplier": 5.12
     },
     "89": {
       "current_count": 57,
-      "target_count": 200,
-      "augmentation_multiplier": 3.51
+      "target_count": 389,
+      "augmentation_multiplier": 6.82
     },
     "41": {
       "current_count": 41,
-      "target_count": 200,
-      "augmentation_multiplier": 4.88
+      "target_count": 389,
+      "augmentation_multiplier": 9.49
     },
     "88": {
       "current_count": 129,
-      "target_count": 200,
-      "augmentation_multiplier": 1.55
+      "target_count": 389,
+      "augmentation_multiplier": 3.02
     },
     "66": {
       "current_count": 29,
-      "target_count": 200,
-      "augmentation_multiplier": 6.9
+      "target_count": 389,
+      "augmentation_multiplier": 13.41
     },
     "67": {
       "current_count": 38,
-      "target_count": 200,
-      "augmentation_multiplier": 5.26
+      "target_count": 389,
+      "augmentation_multiplier": 10.24
     },
     "47": {
       "current_count": 50,
-      "target_count": 200,
-      "augmentation_multiplier": 4.0
+      "target_count": 389,
+      "augmentation_multiplier": 7.78
     },
     "20": {
       "current_count": 28,
-      "target_count": 200,
-      "augmentation_multiplier": 7.14
+      "target_count": 389,
+      "augmentation_multiplier": 13.89
     },
     "40": {
       "current_count": 89,
-      "target_count": 200,
-      "augmentation_multiplier": 2.25
+      "target_count": 389,
+      "augmentation_multiplier": 4.37
     },
     "11": {
       "current_count": 61,
-      "target_count": 200,
-      "augmentation_multiplier": 3.28
+      "target_count": 389,
+      "augmentation_multiplier": 6.38
     },
     "77": {
       "current_count": 96,
-      "target_count": 200,
-      "augmentation_multiplier": 2.08
+      "target_count": 389,
+      "augmentation_multiplier": 4.05
     },
     "29": {
       "current_count": 59,
-      "target_count": 200,
-      "augmentation_multiplier": 3.39
+      "target_count": 389,
+      "augmentation_multiplier": 6.59
     },
     "50": {
       "current_count": 181,
-      "target_count": 200,
-      "augmentation_multiplier": 1.1
+      "target_count": 389,
+      "augmentation_multiplier": 2.15
     },
     "42": {
       "current_count": 91,
-      "target_count": 200,
-      "augmentation_multiplier": 2.2
+      "target_count": 389,
+      "augmentation_multiplier": 4.27
     },
     "82": {
       "current_count": 92,
-      "target_count": 200,
-      "augmentation_multiplier": 2.17
+      "target_count": 389,
+      "augmentation_multiplier": 4.23
     },
     "9": {
       "current_count": 32,
-      "target_count": 200,
-      "augmentation_multiplier": 6.25
+      "target_count": 389,
+      "augmentation_multiplier": 12.16
     },
     "54": {
       "current_count": 50,
-      "target_count": 200,
-      "augmentation_multiplier": 4.0
+      "target_count": 389,
+      "augmentation_multiplier": 7.78
     },
     "98": {
       "current_count": 44,
-      "target_count": 200,
-      "augmentation_multiplier": 4.55
+      "target_count": 389,
+      "augmentation_multiplier": 8.84
     },
     "101": {
       "current_count": 34,
-      "target_count": 200,
-      "augmentation_multiplier": 5.88
+      "target_count": 389,
+      "augmentation_multiplier": 11.44
     },
     "59": {
       "current_count": 76,
-      "target_count": 200,
-      "augmentation_multiplier": 2.63
+      "target_count": 389,
+      "augmentation_multiplier": 5.12
     },
     "6": {
       "current_count": 28,
-      "target_count": 200,
-      "augmentation_multiplier": 7.14
+      "target_count": 389,
+      "augmentation_multiplier": 13.89
     },
     "38": {
       "current_count": 29,
-      "target_count": 200,
-      "augmentation_multiplier": 6.9
+      "target_count": 389,
+      "augmentation_multiplier": 13.41
     },
     "86": {
       "current_count": 44,
-      "target_count": 200,
-      "augmentation_multiplier": 4.55
+      "target_count": 389,
+      "augmentation_multiplier": 8.84
     },
     "15": {
       "current_count": 29,
-      "target_count": 200,
-      "augmentation_multiplier": 6.9
+      "target_count": 389,
+      "augmentation_multiplier": 13.41
     },
     "16": {
       "current_count": 59,
-      "target_count": 200,
-      "augmentation_multiplier": 3.39
+      "target_count": 389,
+      "augmentation_multiplier": 6.59
     },
     "81": {
       "current_count": 78,
-      "target_count": 200,
-      "augmentation_multiplier": 2.56
+      "target_count": 389,
+      "augmentation_multiplier": 4.99
     },
     "58": {
       "current_count": 47,
-      "target_count": 200,
-      "augmentation_multiplier": 4.26
+      "target_count": 389,
+      "augmentation_multiplier": 8.28
     },
     "55": {
       "current_count": 76,
-      "target_count": 200,
-      "augmentation_multiplier": 2.63
+      "target_count": 389,
+      "augmentation_multiplier": 5.12
     },
     "90": {
       "current_count": 53,
-      "target_count": 200,
-      "augmentation_multiplier": 3.77
+      "target_count": 389,
+      "augmentation_multiplier": 7.34
     },
     "63": {
       "current_count": 36,
-      "target_count": 200,
-      "augmentation_multiplier": 5.56
+      "target_count": 389,
+      "augmentation_multiplier": 10.81
     },
     "95": {
       "current_count": 64,
-      "target_count": 200,
-      "augmentation_multiplier": 3.12
+      "target_count": 389,
+      "augmentation_multiplier": 6.08
     },
     "87": {
       "current_count": 108,
-      "target_count": 200,
-      "augmentation_multiplier": 1.85
+      "target_count": 389,
+      "augmentation_multiplier": 3.6
     },
     "51": {
       "current_count": 59,
-      "target_count": 200,
-      "augmentation_multiplier": 3.39
+      "target_count": 389,
+      "augmentation_multiplier": 6.59
     },
     "44": {
       "current_count": 28,
-      "target_count": 200,
-      "augmentation_multiplier": 7.14
+      "target_count": 389,
+      "augmentation_multiplier": 13.89
     },
     "33": {
       "current_count": 28,
-      "target_count": 200,
-      "augmentation_multiplier": 7.14
+      "target_count": 389,
+      "augmentation_multiplier": 13.89
     },
     "37": {
       "current_count": 39,
-      "target_count": 200,
-      "augmentation_multiplier": 5.13
+      "target_count": 389,
+      "augmentation_multiplier": 9.97
     },
     "84": {
       "current_count": 44,
-      "target_count": 200,
-      "augmentation_multiplier": 4.55
+      "target_count": 389,
+      "augmentation_multiplier": 8.84
     },
     "8": {
       "current_count": 32,
-      "target_count": 200,
-      "augmentation_multiplier": 6.25
+      "target_count": 389,
+      "augmentation_multiplier": 12.16
     },
     "61": {
       "current_count": 39,
-      "target_count": 200,
-      "augmentation_multiplier": 5.13
+      "target_count": 389,
+      "augmentation_multiplier": 9.97
     },
     "49": {
       "current_count": 64,
-      "target_count": 200,
-      "augmentation_multiplier": 3.12
+      "target_count": 389,
+      "augmentation_multiplier": 6.08
     },
     "75": {
       "current_count": 75,
-      "target_count": 200,
-      "augmentation_multiplier": 2.67
+      "target_count": 389,
+      "augmentation_multiplier": 5.19
     },
     "34": {
       "current_count": 30,
-      "target_count": 200,
-      "augmentation_multiplier": 6.67
+      "target_count": 389,
+      "augmentation_multiplier": 12.97
     },
     "24": {
       "current_count": 29,
-      "target_count": 200,
-      "augmentation_multiplier": 6.9
+      "target_count": 389,
+      "augmentation_multiplier": 13.41
     },
     "91": {
       "current_count": 46,
-      "target_count": 200,
-      "augmentation_multiplier": 4.35
+      "target_count": 389,
+      "augmentation_multiplier": 8.46
     },
     "13": {
       "current_count": 34,
-      "target_count": 200,
-      "augmentation_multiplier": 5.88
+      "target_count": 389,
+      "augmentation_multiplier": 11.44
     },
     "62": {
       "current_count": 38,
-      "target_count": 200,
-      "augmentation_multiplier": 5.26
+      "target_count": 389,
+      "augmentation_multiplier": 10.24
     },
     "60": {
       "current_count": 35,
-      "target_count": 200,
-      "augmentation_multiplier": 5.71
+      "target_count": 389,
+      "augmentation_multiplier": 11.11
     },
     "69": {
       "current_count": 43,
-      "target_count": 200,
-      "augmentation_multiplier": 4.65
+      "target_count": 389,
+      "augmentation_multiplier": 9.05
     },
     "31": {
       "current_count": 32,
-      "target_count": 200,
-      "augmentation_multiplier": 6.25
+      "target_count": 389,
+      "augmentation_multiplier": 12.16
     },
     "92": {
       "current_count": 32,
-      "target_count": 200,
-      "augmentation_multiplier": 6.25
+      "target_count": 389,
+      "augmentation_multiplier": 12.16
     },
     "64": {
       "current_count": 71,
-      "target_count": 200,
-      "augmentation_multiplier": 2.82
+      "target_count": 389,
+      "augmentation_multiplier": 5.48
     },
     "70": {
       "current_count": 55,
-      "target_count": 200,
-      "augmentation_multiplier": 3.64
+      "target_count": 389,
+      "augmentation_multiplier": 7.07
     },
     "10": {
       "current_count": 61,
-      "target_count": 200,
-      "augmentation_multiplier": 3.28
+      "target_count": 389,
+      "augmentation_multiplier": 6.38
     },
     "5": {
       "current_count": 32,
-      "target_count": 200,
-      "augmentation_multiplier": 6.25
+      "target_count": 389,
+      "augmentation_multiplier": 12.16
     },
     "71": {
       "current_count": 67,
-      "target_count": 200,
-      "augmentation_multiplier": 2.99
+      "target_count": 389,
+      "augmentation_multiplier": 5.81
     },
     "30": {
       "current_count": 36,
-      "target_count": 200,
-      "augmentation_multiplier": 5.56
+      "target_count": 389,
+      "augmentation_multiplier": 10.81
     },
     "53": {
       "current_count": 43,
-      "target_count": 200,
-      "augmentation_multiplier": 4.65
+      "target_count": 389,
+      "augmentation_multiplier": 9.05
     },
     "25": {
       "current_count": 29,
-      "target_count": 200,
-      "augmentation_multiplier": 6.9
+      "target_count": 389,
+      "augmentation_multiplier": 13.41
     },
     "2": {
       "current_count": 28,
-      "target_count": 200,
-      "augmentation_multiplier": 7.14
+      "target_count": 389,
+      "augmentation_multiplier": 13.89
     },
     "28": {
       "current_count": 55,
-      "target_count": 200,
-      "augmentation_multiplier": 3.64
+      "target_count": 389,
+      "augmentation_multiplier": 7.07
     },
     "100": {
       "current_count": 41,
-      "target_count": 200,
-      "augmentation_multiplier": 4.88
+      "target_count": 389,
+      "augmentation_multiplier": 9.49
     },
     "78": {
       "current_count": 29,
-      "target_count": 200,
-      "augmentation_multiplier": 6.9
+      "target_count": 389,
+      "augmentation_multiplier": 13.41
     },
     "7": {
       "current_count": 59,
-      "target_count": 200,
-      "augmentation_multiplier": 3.39
+      "target_count": 389,
+      "augmentation_multiplier": 6.59
     },
     "1": {
       "current_count": 42,
-      "target_count": 200,
-      "augmentation_multiplier": 4.76
+      "target_count": 389,
+      "augmentation_multiplier": 9.26
     },
     "68": {
       "current_count": 38,
-      "target_count": 200,
-      "augmentation_multiplier": 5.26
+      "target_count": 389,
+      "augmentation_multiplier": 10.24
     },
     "43": {
       "current_count": 65,
-      "target_count": 200,
-      "augmentation_multiplier": 3.08
+      "target_count": 389,
+      "augmentation_multiplier": 5.98
     },
     "85": {
       "current_count": 41,
-      "target_count": 200,
-      "augmentation_multiplier": 4.88
+      "target_count": 389,
+      "augmentation_multiplier": 9.49
     },
     "35": {
       "current_count": 53,
-      "target_count": 200,
-      "augmentation_multiplier": 3.77
+      "target_count": 389,
+      "augmentation_multiplier": 7.34
     },
     "23": {
       "current_count": 29,
-      "target_count": 200,
-      "augmentation_multiplier": 6.9
+      "target_count": 389,
+      "augmentation_multiplier": 13.41
     },
     "94": {
       "current_count": 90,
-      "target_count": 200,
-      "augmentation_multiplier": 2.22
+      "target_count": 389,
+      "augmentation_multiplier": 4.32
     },
     "19": {
       "current_count": 39,
-      "target_count": 200,
-      "augmentation_multiplier": 5.13
+      "target_count": 389,
+      "augmentation_multiplier": 9.97
     },
     "12": {
       "current_count": 34,
-      "target_count": 200,
-      "augmentation_multiplier": 5.88
+      "target_count": 389,
+      "augmentation_multiplier": 11.44
     },
     "0": {
       "current_count": 28,
-      "target_count": 200,
-      "augmentation_multiplier": 7.14
+      "target_count": 389,
+      "augmentation_multiplier": 13.89
     },
     "27": {
       "current_count": 46,
-      "target_count": 200,
-      "augmentation_multiplier": 4.35
+      "target_count": 389,
+      "augmentation_multiplier": 8.46
     },
     "46": {
       "current_count": 47,
-      "target_count": 200,
-      "augmentation_multiplier": 4.26
+      "target_count": 389,
+      "augmentation_multiplier": 8.28
     },
     "99": {
       "current_count": 34,
-      "target_count": 200,
-      "augmentation_multiplier": 5.88
+      "target_count": 389,
+      "augmentation_multiplier": 11.44
     },
     "17": {
       "current_count": 57,
-      "target_count": 200,
-      "augmentation_multiplier": 3.51
+      "target_count": 389,
+      "augmentation_multiplier": 6.82
     },
     "96": {
       "current_count": 46,
-      "target_count": 200,
-      "augmentation_multiplier": 4.35
+      "target_count": 389,
+      "augmentation_multiplier": 8.46
     },
     "26": {
       "current_count": 28,
-      "target_count": 200,
-      "augmentation_multiplier": 7.14
+      "target_count": 389,
+      "augmentation_multiplier": 13.89
     }
   }
 }
