@@ -198,14 +198,14 @@ def save_best_config(study, dataset_name):
     print(f"[INFO] Best configuration saved to: {config_path}")
 
 
-def run_optuna_hyperband(dataset_name="flowers"):
+def optuna_arch_search(dataset_name):
     """
     Entry point to run the Optuna+Hyperband architectural and hyperparameter search.
     """
-    storage_path = f"sqlite:///optuna_{dataset_name}.db"
+    storage_path = f"sqlite:///nas_optuna_{dataset_name}.db"
     study = optuna.create_study(
         direction="minimize",
-        study_name=f"optuna_search_{dataset_name}",
+        study_name=f"nas_optuna_{dataset_name}",
         storage=storage_path,
         load_if_exists=True,
         sampler=optuna.samplers.TPESampler(seed=42),
@@ -220,7 +220,6 @@ def run_optuna_hyperband(dataset_name="flowers"):
 )
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)
+    return study.best_trial.params
 
 
-if __name__ == "__main__":
-    run_optuna_hyperband("flowers")

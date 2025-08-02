@@ -59,70 +59,6 @@ class AutoMLDataset(Dataset):
             "class_distribution": self.get_class_distribution()
         }
         
-def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_per_class: int = 150):
-    project_root = Path(__file__).resolve().parents[2]
-    dataset_path = project_root / "data" / dataset_name
-    #print(f"📂 Dataset Path: {dataset_path}")
-    print(f"min num per class analyze_dataset: {min_samples_per_class}")
-    # Load CSV
-    csv_path = os.path.join(dataset_path, "train.csv")
-    img_dir = os.path.join(dataset_path, "images_train")
-
-    df = pd.read_csv(csv_path)
-    labels = df["label"].tolist()
-    image_files = df["image_file_name"].tolist()
-
-    # Basic stats
-    num_samples = len(labels)
-    num_classes = len(set(labels))
-    class_counts = dict(Counter(labels))
-    class_freqs = {k: v / num_samples for k, v in class_counts.items()}
-
-    # Compute mean and median frequency
-    freq_values = list(class_freqs.values())
-    mean_freq = round(float(np.mean(freq_values)), 6)
-    median_freq = round(float(np.median(freq_values)), 6)
-
-    # Image shape info
-    first_img_path = os.path.join(img_dir, image_files[0])
-    with Image.open(first_img_path) as img:
-        width, height = img.size
-        num_channels = len(img.getbands())
-
-    metadata = {
-        "dataset": dataset_name,
-        "num_samples": num_samples,
-        "num_classes": num_classes,
-        "image_resolution": (width, height),
-        "num_channels": num_channels,
-        "class_counts": class_counts,
-        "class_distribution": {
-            str(k): round(v, 4)
-            for k, v in sorted(class_freqs.items(), key=lambda item: int(item[0]))
-        },
-        "mean_class_frequency": mean_freq,
-        "median_class_frequency": median_freq,
-        "is_imbalanced": None,
-        "undersampled_classes": {}
-    }
-
-    print("\n📊 Dataset Metadata Loaded.")
-
-    # Analyze imbalance and undersampling
-    check_imbalance(metadata)
-    metadata["undersampled_classes"] = get_undersampled_classes(
-        metadata["class_counts"],
-        min_samples_per_class=min_samples_per_class
-    )
-
-    if save_to_file:
-        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        filename = os.path.join(root_dir, f"dataset_analysis_{dataset_name}.json")
-        with open(filename, "w") as f:
-            json.dump(metadata, f, indent=2)
-        print(f"\n✅ Updated metadata with undersampled class info saved to: {filename}")
-
-    return metadata
 
 
 imbalance_votes = []
@@ -223,3 +159,68 @@ def get_undersampled_classes(class_counts, min_samples_per_class):
     return undersampled
 
 
+def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_per_class: int = 150):
+    print("Analyze dataset started")
+    project_root = Path(__file__).resolve().parents[2]
+    dataset_path = project_root / "data" / dataset_name
+    #print(f"📂 Dataset Path: {dataset_path}")
+    print(f"min num per class analyze_dataset: {min_samples_per_class}")
+    # Load CSV
+    csv_path = os.path.join(dataset_path, "train.csv")
+    img_dir = os.path.join(dataset_path, "images_train")
+
+    df = pd.read_csv(csv_path)
+    labels = df["label"].tolist()
+    image_files = df["image_file_name"].tolist()
+
+    # Basic stats
+    num_samples = len(labels)
+    num_classes = len(set(labels))
+    class_counts = dict(Counter(labels))
+    class_freqs = {k: v / num_samples for k, v in class_counts.items()}
+
+    # Compute mean and median frequency
+    freq_values = list(class_freqs.values())
+    mean_freq = round(float(np.mean(freq_values)), 6)
+    median_freq = round(float(np.median(freq_values)), 6)
+
+    # Image shape info
+    first_img_path = os.path.join(img_dir, image_files[0])
+    with Image.open(first_img_path) as img:
+        width, height = img.size
+        num_channels = len(img.getbands())
+
+    metadata = {
+        "dataset": dataset_name,
+        "num_samples": num_samples,
+        "num_classes": num_classes,
+        "image_resolution": (width, height),
+        "num_channels": num_channels,
+        "class_counts": class_counts,
+        "class_distribution": {
+            str(k): round(v, 4)
+            for k, v in sorted(class_freqs.items(), key=lambda item: int(item[0]))
+        },
+        "mean_class_frequency": mean_freq,
+        "median_class_frequency": median_freq,
+        "is_imbalanced": None,
+        "undersampled_classes": {}
+    }
+
+    print("\n📊 Dataset Metadata Loaded.")
+
+    # Analyze imbalance and undersampling
+    check_imbalance(metadata)
+    metadata["undersampled_classes"] = get_undersampled_classes(
+        metadata["class_counts"],
+        min_samples_per_class=min_samples_per_class
+    )
+
+    if save_to_file:
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        filename = os.path.join(root_dir, f"dataset_analysis_{dataset_name}.json")
+        with open(filename, "w") as f:
+            json.dump(metadata, f, indent=2)
+        print(f"\n✅ Updated metadata with undersampled class info saved to: {filename}")
+
+    return metadata
