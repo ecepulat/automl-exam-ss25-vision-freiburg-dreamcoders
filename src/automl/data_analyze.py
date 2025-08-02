@@ -223,3 +223,30 @@ def get_undersampled_classes(class_counts, min_samples_per_class):
     return undersampled
 
 
+<<<<<<< HEAD
+=======
+def data_analyze_run():
+
+    print("Data analyze run")
+    """
+    metadata = analyze_dataset("flowers", save_to_file=False)  # <-- disable early save
+    check_imbalance(metadata)
+
+    undersampled_info = get_undersampled_classes(metadata["class_counts"], min_samples_per_class=200)
+    metadata["undersampled_classes"] = undersampled_info
+
+    print("🔍 Undersampled Classes Detected:")
+    #for cls, info in undersampled_info.items():
+       # print(f"Class {cls}: {info['current_count']} ➡ {info['target_count']} (×{info['augmentation_multiplier']})")
+
+    # ✅ Now save the updated version
+    # Save it to root of project
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    filename = os.path.join(root_dir, f"dataset_analysis_{metadata['dataset']}.json")
+
+    with open(filename, "w") as f:
+        json.dump(metadata, f, indent=2)
+    print(f"✅ Updated metadata with undersampled class info saved to {filename}")
+
+"""
+>>>>>>> 945fe7e (aysuu)

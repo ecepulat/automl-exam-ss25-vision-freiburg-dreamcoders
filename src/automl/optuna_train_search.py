@@ -198,7 +198,7 @@ def save_best_config(study, dataset_name):
     print(f"[INFO] Best configuration saved to: {config_path}")
 
 
-def run_optuna_hyperband(dataset_name="flowers"):
+def optuna_arch_search(dataset_name="flowers"):
     """
     Entry point to run the Optuna+Hyperband architectural and hyperparameter search.
     """
@@ -220,7 +220,4 @@ def run_optuna_hyperband(dataset_name="flowers"):
 )
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)
-
-
-if __name__ == "__main__":
-    run_optuna_hyperband("flowers")
+    return study.best_trial.params
