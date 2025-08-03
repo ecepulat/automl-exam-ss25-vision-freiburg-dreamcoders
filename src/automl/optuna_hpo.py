@@ -27,14 +27,14 @@ import optuna
 
 import json
 class QuickTrain:
-    def __init__(self, dataset_name, batch_size=32, epochs=6, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, track_metrics=True):
+    def __init__(self, dataset_name, batch_size=32, epochs=4, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, track_metrics=True):
         self.dataset_name = dataset_name
         self.architecture_params = architecture_params  # Best Arch found in NAS
         self.batch_size = batch_size
         self.epochs = epochs
         self.model_name = model_name
         self.config_path = config_path
-        self.learning_rate = learning_rate  # NEW
+        self.learning_rate = learning_rate  
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.min_samples_per_class = min_samples_per_class
         self.LOG_FILE = "hpo_all_trials.log"
@@ -52,7 +52,7 @@ class QuickTrain:
         with open(self.LOG_FILE, "a") as f:
             f.write(f"📏 Total Parameters: {params}\n")
             f.write(f"🛠️ Hyperparameters:\n")
-            f.write(f"  • Learning Rate: 1e-4\n")
+            f.write(f"  • Learning Rate: {self.learning_rate:.2e}\n")
             f.write(f"  • Epochs: {self.epochs}\n")
             f.write(f"  • Batch Size: {self.batch_size}\n")
             f.write(f"  • Optimizer: {self.optimizer}\n")
@@ -155,24 +155,15 @@ class QuickTrain:
         else:
             raise ValueError("Must provide architecture_params")
         # Parse block configs
-        num_layers = best_config["num_layers"]
-        blocks = []
-        for i in range(num_layers):
-            blocks.append({
-                "filters": best_config[f"filters{i}"],
-                "kernel": best_config[f"kernel{i}"],
-                "use_se": best_config[f"usese{i}"],
-                "use_residual": best_config[f"useresidual{i}"],
-                "expansion": best_config[f"expansion{i}"],
-                "use_depthwise": best_config[f"usedepthwise{i}"],
-                "downsample": False if i == 0 else True  # example logic
-            })
+        blocks = best_config["arch_blocks"]
+        dropout = best_config["dropout"]
+        pool_type = best_config["pool_type"]
         #print(" Using architecture from trial:", best_config)
 
         self.model = build_model_from_config(
             blocks=blocks,
-            dropout=best_config["dropout"],
-            pool_type=best_config["pool_type"],
+            dropout=dropout,
+            pool_type=pool_type,
             num_classes=self.metadata["num_classes"],
             input_resolution=(512, 512)
         ).to(self.device)
@@ -221,8 +212,8 @@ class QuickTrain:
 
         best_valid_acc = 0.0
         patience_counter = 0
-        early_stopping_patience = self.args.early_stopping_patience
-        early_stopping_min_delta = self.args.early_stopping_min_delta
+        early_stopping_patience = 5
+        early_stopping_min_delta = 0.001
 
         for epoch in range(self.epochs):
             self.model.train()
@@ -366,7 +357,10 @@ def objective(trial, dataset_name, architecture_params):
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "AdamW"])
 
     # 2. Learning rate ranges tailored for Adam/AdamW
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+    if optimizer_name == "AdamW":
+        lr = trial.suggest_float("lr", 3e-4, 3e-3, log=True)
+    else:
+        lr = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
 
     # 3. Weight decay for regularization
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
@@ -375,10 +369,9 @@ def objective(trial, dataset_name, architecture_params):
     min_samples = trial.suggest_int("min_samples_per_class", 150, 400)
     batch_size = trial.suggest_categorical("batch_size", [16, 32])
 
-    # 5. Longer training to improve accuracy signal
-    epochs = 20
 
-    print(f"🔎 Trial {trial.number} trying: optimizer={optimizer_name}, lr={learning_rate:.2e}, weight_decay={weight_decay:.1e}, min_samples={min_samples}, batch_size={batch_size}")
+
+    print(f"🔎 Trial {trial.number} trying: optimizer={optimizer_name}, lr={lr:.2e}, weight_decay={weight_decay:.1e}, min_samples={min_samples}, batch_size={batch_size}")
 
     try:
         trainer = QuickTrain(
@@ -387,8 +380,8 @@ def objective(trial, dataset_name, architecture_params):
             architecture_params=architecture_params,
             min_samples_per_class=min_samples,
             batch_size=batch_size,
-            epochs=epochs,
-            learning_rate=learning_rate,
+            epochs=4,
+            learning_rate=lr,
             optimizer_name=optimizer_name
         )
 
@@ -423,12 +416,13 @@ def run_hpo(dataset_name, architecture_params):
         "min_samples_per_class": 200,
         "batch_size": 32,
         "optimizer": "Adam",
-        "learning_rate": 1e-4,
+        "lr": 1e-4,
         "weight_decay": 1e-4
     })
 
     # Start the HPO process
-    study.optimize(lambda trial: objective(trial, dataset_name, architecture_params), timeout=6 * 60 * 60)
+    study.optimize(lambda trial: objective(trial, dataset_name, architecture_params), 
+    timeout=2*3600) #2hours HPO
 
     # ✅ Log the best trial
     print("\n✅ Best trial:")
@@ -448,13 +442,48 @@ def run_hpo(dataset_name, architecture_params):
     print("HPO ENDED") # DEBUG
 
     os.makedirs("plots", exist_ok=True)
-    plt.rcParams['figure.figsize'] = (6, 4)  # optional global style
+    plt.rcParams['figure.figsize'] = (6, 4)
 
     print("📈 Saving HPO plots...")
-    vis.plot_optimization_history(study).savefig(f"plots/{dataset_name}_optuna_history.png", dpi=300, bbox_inches='tight')
-    vis.plot_param_importances(study).savefig(f"plots/{dataset_name}_optuna_importance.png", dpi=300, bbox_inches='tight')
-    vis.plot_parallel_coordinate(study).savefig(f"plots/{dataset_name}_optuna_parallel.png", dpi=300, bbox_inches='tight')
-    vis.plot_slice(study).savefig(f"plots/{dataset_name}_optuna_slice.png", dpi=300, bbox_inches='tight')
+
+    # Optimization history
+    vis.plot_optimization_history(study)
+    plt.gcf().savefig(f"plots/{dataset_name}_optuna_history.png", dpi=300, bbox_inches='tight')
+    plt.clf()
+
+    # Parameter importances
+    vis.plot_param_importances(study)
+    plt.gcf().savefig(f"plots/{dataset_name}_optuna_importance.png", dpi=300, bbox_inches='tight')
+    plt.clf()
+
+    # Parallel coordinate plot with readable text
+    fig = vis.plot_parallel_coordinate(
+        study,
+        params=["batch_size", "lr", "min_samples_per_class", "optimizer", "weight_decay"]
+    )
+    fig.set_size_inches(10, 6)
+    plt.xticks(fontsize=10, rotation=20)
+    plt.yticks(fontsize=10)
+    plt.tight_layout()
+    plt.savefig("flowers_optuna_parallel.png", dpi=300)
+
+
+    # Slice plot
+    fig = vis.plot_slice(study, params=["batch_size", "lr", "min_samples_per_class", "optimizer", "weight_decay"])
+    fig.set_size_inches(12, 4)  # wider canvas
+    plt.tight_layout()
+
+    # Tweak fonts and rotations for all subplots
+    for ax in fig.axes:
+        for label in ax.get_xticklabels():
+            label.set_rotation(30)
+            label.set_fontsize(8)
+        for label in ax.get_yticklabels():
+            label.set_fontsize(8)
+
+    plt.savefig("flowers_optuna_slice.png", dpi=300)
+
+
 
     print("✅ HPO complete and visualizations saved.")
 

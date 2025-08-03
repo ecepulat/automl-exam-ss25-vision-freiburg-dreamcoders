@@ -1,0 +1,10 @@
+matplotlib==3.10.5
+numpy==2.3.2
+optuna==4.4.0
+pandas==2.3.1
+Pillow==11.3.0
+scikit_learn==1.7.1
+scipy==1.16.1
+torch==2.7.1+cu128
+torchvision==0.22.1+cu128
+tqdm==4.67.1

@@ -1,6 +1,0 @@
-Best Trial #139
-Validation Accuracy: 0.4300
-min_samples_per_class: 349
-batch_size: 32
-optimizer: RMSprop
-learning_rate: 1.8435614572456543e-05

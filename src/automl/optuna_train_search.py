@@ -18,37 +18,72 @@ from model_builder import build_model_from_config
 from torch.utils.data import random_split
 import traceback
 import random
+
+import datetime
 optuna.logging.set_verbosity(optuna.logging.INFO)
+
 def define_search_space(trial, ds_budget):
     """
     Define the architectural and training hyperparameter search space for Optuna.
+
+    This function builds the architecture block-by-block using fixed filters per stage,
+    and samples other parameters (kernel size, SE, residual, depthwise, expansion) 
+    for each block. The final block list and global config are stored as user_attrs.
     """
-    num_layers = trial.suggest_int("num_layers",6, 12)
+    num_layers = trial.suggest_int("num_layers", 9, 15)
     blocks = []
-    # Pick exactly ds_budget layers that will downsample
+
+    # Step 1: Choose which layers will perform downsampling
     all_indices = list(range(num_layers))
-    ds_indices = set(random.sample(all_indices, min(ds_budget, num_layers)))  # <-- This is the trick
-    #here if we have 8 layers we will randomly chose budget many layers. (Because it cannot apply downsampling in all of the layers)
+    ds_indices = set(random.sample(all_indices, min(ds_budget, num_layers)))
+
+    # Step 2: Define stage-wise filter sizes (fixed, not searched)
+    filter_stage = [64, 96, 128, 160, 192]
+    stage_size = max(1, num_layers // len(filter_stage))  # Prevent division by zero
 
     for i in range(num_layers):
+        stage_idx = min(i // stage_size, len(filter_stage) - 1)
+        filters = filter_stage[stage_idx]
+
+        # Step 3: Search for other architectural decisions
+        expansion = 6 if i < 3 else trial.suggest_categorical(f"expansion{i}", [3, 4, 6])
+        use_residual = True if i >= num_layers // 2 else trial.suggest_categorical(f"useresidual{i}", [True, False])
+        use_depthwise = trial.suggest_categorical(f"usedepthwise{i}", [True, False]) if i % 2 == 0 else False
+
+        # Optional: Save filters for tracking
+        trial.set_user_attr(f"filters{i}", filters)
+
+        # Step 4: Build block config
         blocks.append({
-            "filters": trial.suggest_categorical(f"filters{i}", [32, 64, 96, 128, 160, 192]),
+            "filters": filters,
             "kernel": trial.suggest_categorical(f"kernel{i}", [3, 5, 7]),
             "use_se": trial.suggest_categorical(f"usese{i}", [True, False]),
-            "use_residual": trial.suggest_categorical(f"useresidual{i}", [True, False]),
+            "use_residual": use_residual,
             "downsample": i in ds_indices,
-            "expansion": trial.suggest_categorical(f"expansion{i}", [1, 3, 6]),
-            "use_depthwise": trial.suggest_categorical(f"usedepthwise{i}", [True, False]),
+            "expansion": expansion,
+            "use_depthwise": use_depthwise,
         })
-        # Count how many downsample=True were chosen
+
+    # Step 5: Enforce at least 2 SE blocks
+    if sum(block["use_se"] for block in blocks) < 2:
+        for idx in random.sample(range(num_layers), 2):
+            blocks[idx]["use_se"] = True
+
     downsample_count = sum(block["downsample"] for block in blocks)
     print(f"[Trial {trial.number}] 🔻 Downsampling count: {downsample_count} (Budget: {ds_budget})")
 
+    # Step 6: Global hyperparameters
     dropout = trial.suggest_float("dropout", 0.1, 0.5)
-    pool_type = trial.suggest_categorical("pool_type", ["none", "max", "avg"])
+    pool_type = trial.suggest_categorical("pool_type", ["max", "avg"])
+
+    # ✅ Step 7: Save the full architecture info for later retrieval
+    trial.set_user_attr("arch_blocks", blocks)
+    trial.set_user_attr("dropout", dropout)
+    trial.set_user_attr("pool_type", pool_type)
+
     return blocks, dropout, pool_type
 
-import datetime
+
 
 def compute_downsampling_budget(input_res, min_output_size=8):
     return math.floor(math.log2(input_res / min_output_size))
@@ -151,7 +186,7 @@ def objective(trial, dataset_name="flowers"):
         criterion = nn.CrossEntropyLoss()
         
         # Training loop (5 epochs)
-        for epoch in range(6):
+        for epoch in range(5):
             start = time.time()
             print(f"trial : {trial.number} epoch : {epoch}")
             model.train()
@@ -191,11 +226,18 @@ def save_best_config(study, dataset_name):
     """
     Save the best trial's configuration to a JSON file.
     """
-    best_params = study.best_trial.params
+    best_trial = study.best_trial
+    # Merge regular params and user attributes (e.g., filters0, filters1, ...)
+    best_params = {**best_trial.params, **best_trial.user_attrs}
+
     config_path = f"best_config_{dataset_name}.json"
+    output = {
+        "params": best_params,
+        "value": best_trial.value  # this is what Optuna minimized (1 - accuracy)
+    }
     with open(config_path, "w") as f:
-        json.dump(best_params, f, indent=4)
-    print(f"[INFO] Best configuration saved to: {config_path}")
+        json.dump(output, f, indent=4)
+    print(f"[INFO] Best configuration and value saved to: {config_path}")
 
 
 def optuna_arch_search(dataset_name):
@@ -216,10 +258,13 @@ def optuna_arch_search(dataset_name):
     study.optimize(
     lambda trial: objective(trial, dataset_name),
     callbacks=[print_current_trial],
-    timeout=18000  # in seconds 5 hours 
+    timeout=3 * 3600 #3hours NAS
 )
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)
-    return study.best_trial.params
+
+        # Merge all searched hyperparameters and user-defined architecture attributes
+    merged_params = {**study.best_trial.params, **study.best_trial.user_attrs}
+    return merged_params
 
 

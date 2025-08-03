@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Single convolutional block supporting depthwise, SE, and residual connection
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -45,38 +44,38 @@ class Block(nn.Module):
         if self.use_se:
             scale = self.se(out)
             out = out * scale
-        if self.use_residual and out.shape == x.shape:
-            out = out + x
+        if self.use_residual:
+            if out.shape == x.shape:
+                out = out + x
+            else:
+                # Optional: log or warn about mismatch
+                pass
         return out
 
-# Full model constructed from blocks + global pooling + classifier
 class CustomNet(nn.Module):
     def __init__(self, blocks, dropout, pool_type, num_classes, input_resolution=(128, 128)):
         super().__init__()
 
-        # Initial stem conv layer
         self.stem = nn.Sequential(
             nn.Conv2d(3, blocks[0]["filters"], kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(blocks[0]["filters"]),
             nn.ReLU(inplace=True)
         )
 
-        # Stack of sampled blocks
+        # Build sequential layers
         layers = []
         in_channels = blocks[0]["filters"]
         for block_cfg in blocks:
+            block_cfg = block_cfg.copy()  # avoid side effects
             block_cfg["in_channels"] = in_channels
             layers.append(Block(block_cfg))
             in_channels = block_cfg["filters"]
         self.layers = nn.Sequential(*layers)
 
-        # Pooling strategy
-        if pool_type == "avg":
-            self.global_pool = nn.AdaptiveAvgPool2d(1)
-        elif pool_type == "max":
-            self.global_pool = nn.AdaptiveMaxPool2d(1)
-        else:
-            self.global_pool = nn.Identity()
+        # Global pooling
+        self.global_pool = nn.AdaptiveAvgPool2d(1) if pool_type == "avg" else \
+                           nn.AdaptiveMaxPool2d(1) if pool_type == "max" else \
+                           nn.Identity()
 
         self.dropout = nn.Dropout(dropout)
 
@@ -99,6 +98,13 @@ class CustomNet(nn.Module):
         x = self.dropout(x)
         return self.classifier(x)
 
-# External entry point to create the model in search pipeline
 def build_model_from_config(blocks, dropout, pool_type, num_classes, input_resolution=(128, 128)):
-    return CustomNet(blocks, dropout, pool_type, num_classes, input_resolution)
+    model = CustomNet(blocks, dropout, pool_type, num_classes, input_resolution)
+    model.apply(init_weights_he)
+    return model
+
+def init_weights_he(module):
+    if isinstance(module, (nn.Conv2d, nn.Linear)):
+        nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+        if module.bias is not None:
+            nn.init.zeros_(module.bias)
