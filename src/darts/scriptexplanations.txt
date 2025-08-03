@@ -8,3 +8,17 @@ architect.py		🎯 Bilevel optimization logic — the core of DARTS gradient upd
 utils.py		🔧 Logging, checkpointing, and helper functions.
 visualize.py		🧠 Visualizes architectures (optional, useful for debugging).
 test.py			✅ Basic testing script (optional).
+
+# UPDATED VERSION
+| File                  | Purpose                                                                                               |
+| ----------------------| ----------------------------------------------------------------------------------------------------- |
+| darts_train_search.py | Runs architecture search with DARTS. Returns best genotype.                                           |
+| darts_train.py        | Trains the best architecture with early stopping and HPO.                                             |
+| darts_hpo.py          | Performs HPO (hyperparameter optimization) for the selected DARTS architecture.                       |
+| utils.py              | Provides utilities: averaging, accuracy, transformation creation, logging.                            |
+| model.py              | Implements the final network based on a genotype. Used in training.                                   |
+| model_search.py       | Implements the search network with learnable architecture parameters. Used during DARTS search.       |
+| operations.py         | Defines all primitive operations for the search/architecture.                                         |
+| architect.py          | Optimizes architecture parameters (`alphas`) during search.                                           |
+| genotypes.py          | Defines and saves Genotype representations. Holds final best genotype.                                |
+| visualize.py          | Optional — visualizes the architecture genotype using Graphviz. Useful but not required for training. |

@@ -4,7 +4,9 @@ from data_analyze import analyze_dataset
 from optuna_hpo import run_hpo
 from optuna_train_search import optuna_arch_search
 from optuna_train import final_train  
-
+from darts.darts_train_search import darts_arch_search
+from darts.darts_hpo import run_darts_hpo
+from darts.darts_train import full_train
 def main():
     parser = argparse.ArgumentParser(description="AutoML pipeline entrypoint")
 
@@ -35,8 +37,13 @@ def main():
     
       
     else:
-        print("[DECISION] Using DARTS search strategy")
-        
+        print("[DECISION] Using DARTS search strategy + Optuna HPO")
+        best_architecture_params=darts_arch_search(dataset_name) # Finding best architecture using hard coded hyperparams
+        best_param_hpo= run_darts_hpo() # Finding best hyperparams for the full training
+        full_train(dataset_name=dataset_name,
+            best_architecture_params=best_architecture_params,
+            best_hpo_params=best_param_hpo)
+
         #from darts_train_search import main as darts_search
         #darts_search(dataset_name)
 
