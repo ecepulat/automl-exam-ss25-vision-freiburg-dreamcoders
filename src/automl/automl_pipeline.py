@@ -1,9 +1,15 @@
 import argparse
+import sys
 from pathlib import Path
 from data_analyze import analyze_dataset
 from optuna_hpo import run_hpo
 from optuna_train_search import optuna_arch_search
-from optuna_train import final_train  
+from optuna_train import final_train
+# Add src/ to sys.path to resolve the darts folder 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from darts.darts_train_search import darts_arch_search
+from darts.darts_hpo import run_darts_hpo
+from darts.darts_train import full_train
 import time
 
 def format_time(seconds):
@@ -48,9 +54,26 @@ def main():
       
     else:
         print("[DECISION] Using DARTS search strategy")
-        
-        #from darts_train_search import main as darts_search
-        #darts_search(dataset_name)
+        start = time.time()
+        print("[DEBUG] Starting darts_arch_search()...")
+        best_architecture_params=darts_arch_search(dataset_name) # Finding best architecture using hard coded hyperparams
+        architecture_time = time.time() - start
+        print(f"[DEBUG] Got genotype: {best_architecture_params}")
+
+        print("[DEBUG] Starting run_darts_hpo()...")
+        start = time.time()
+        best_param_hpo= run_darts_hpo() # Finding best hyperparams for the full training
+        hpo_time = time.time() - start
+        print(f"[DEBUG] Got HPO params: {best_param_hpo}")
+
+        print("[DEBUG] Starting full_train()...")
+        start = time.time()
+        full_train(dataset_name=dataset_name,
+            best_architecture_params=best_architecture_params,
+            best_hpo_params=best_param_hpo)
+        final_train_time = time.time() - start
+        print("[DEBUG] Training complete.")
+
     total_time = time.time() - total_start
     with open("time_pipeline.log", "w") as f:
         f.write("Time Pipeline Summary:\n")
