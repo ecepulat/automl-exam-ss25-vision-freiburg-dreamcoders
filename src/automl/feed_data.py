@@ -1,7 +1,7 @@
 import os
 from PIL import Image
 from torch.utils.data import Dataset
-from utils import get_default_transforms, get_augmented_transforms
+from .utils import get_default_transforms, get_augmented_transforms
 from torchvision.transforms import Resize, ToTensor, Compose
 
 

@@ -1,0 +1,38 @@
+{
+  "dataset": "fashion",
+  "num_samples": 60000,
+  "num_classes": 10,
+  "image_resolution": [
+    28,
+    28
+  ],
+  "num_channels": 1,
+  "class_counts": {
+    "9": 6000,
+    "0": 6000,
+    "3": 6000,
+    "2": 6000,
+    "7": 6000,
+    "5": 6000,
+    "1": 6000,
+    "6": 6000,
+    "4": 6000,
+    "8": 6000
+  },
+  "class_distribution": {
+    "0": 0.1,
+    "1": 0.1,
+    "2": 0.1,
+    "3": 0.1,
+    "4": 0.1,
+    "5": 0.1,
+    "6": 0.1,
+    "7": 0.1,
+    "8": 0.1,
+    "9": 0.1
+  },
+  "mean_class_frequency": 0.1,
+  "median_class_frequency": 0.1,
+  "is_imbalanced": false,
+  "undersampled_classes": {}
+}

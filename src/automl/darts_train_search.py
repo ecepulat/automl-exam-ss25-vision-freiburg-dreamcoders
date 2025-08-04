@@ -4,7 +4,7 @@ import time
 import glob
 import numpy as np
 import torch
-import utils
+import darts.utils as utils
 import logging
 import argparse
 import torch.nn as nn
@@ -14,16 +14,16 @@ import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 from tqdm import tqdm
 from torch.autograd import Variable
-from model_search import Network
-from architect import Architect
+from darts.model_search import Network
+from darts.architect import Architect
 import torch.multiprocessing
-
+from pathlib import Path
 torch.cuda.empty_cache()
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from feed_data import BalancedDataset
-from data_analyze import analyze_dataset
+from .feed_data import BalancedDataset
+from .data_analyze import analyze_dataset
 import pandas as pd
 import json
 
@@ -60,7 +60,10 @@ def main():
   dataset_name = "fashion"
   analyze_dataset(dataset_name)
 
-  metadata_path = os.path.join(args.data, dataset_name, f"dataset_analysis_{dataset_name}.json")
+  project_root = Path(__file__).resolve().parents[2]
+  metadata_path = project_root / "dataset_analysis_fashion.json"
+
+  #metadata_path = os.path.join(args.data, dataset_name, f"dataset_analysis_{dataset_name}.json")
   if not os.path.exists(metadata_path):
       metadata_path = f"dataset_analysis_{dataset_name}.json"
 
@@ -107,8 +110,17 @@ def main():
     print(f"Validation - Loss: {valid_obj:.4f}, Accuracy: {valid_acc:.2f}%")
 
     utils.save(model, os.path.join(args.save, 'weights.pt'))
+    
+  # save genotype
+  genotype = model.genotype()
+  genotype_path = os.path.join(args.save, "genotype.json")
+  with open(genotype_path, "w") as f:
+      json.dump(genotype._asdict(), f, indent=2)
+  print(f"Saved final genotype to {genotype_path}")
+
 
 def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr):
+  model.drop_path_prob = args.drop_path_prob
   objs = utils.AvgrageMeter()
   top1 = utils.AvgrageMeter()
   top5 = utils.AvgrageMeter()
@@ -183,7 +195,8 @@ if __name__ == '__main__':
 
   from types import SimpleNamespace
   args = SimpleNamespace(
-      data='C:/Users/ecepu/Documents/AutoML/data',
+      #data='C:/Users/ecepu/Documents/AutoML/data',
+      data = 'C:\\Users\\PC\\Desktop\\autoML\\Project\\data',
       batch_size=24,
       learning_rate=0.025,
       learning_rate_min=0.001,
@@ -201,7 +214,7 @@ if __name__ == '__main__':
       save='EXP',
       seed=0,
       grad_clip=5,
-      train_portion=0.3,
+      train_portion=0.3, #######################0.7
       unrolled=False,
       arch_learning_rate=3e-4,
       arch_weight_decay=1e-3,

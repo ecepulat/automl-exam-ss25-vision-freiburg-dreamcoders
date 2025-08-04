@@ -49,9 +49,9 @@ def get_default_transforms(meta, resized_res=None):
     num_channels = meta["num_channels"]
 
     if resized_res is not None:
-        print(f"get_default_transforms image reso is downsized from {meta["image_resolution"]} to {resized_res}")
+        print(f"get_default_transforms image reso is downsized from {meta['image_resolution']} to {resized_res}")
     else:
-        print(f"get_default_transforms image reso is not downsized {meta["image_resolution"]}")
+        print(f"get_default_transforms image reso is not downsized {meta['image_resolution']}")
 
     if num_channels == 1:
         normalize = transforms.Normalize((0.5,), (0.5,))
@@ -61,6 +61,7 @@ def get_default_transforms(meta, resized_res=None):
 
     return transforms.Compose([
         transforms.Resize(image_size),
+        transforms.Grayscale(num_output_channels=1), 
         transforms.ToTensor(),
         normalize
     ])
@@ -83,9 +84,9 @@ def get_augmented_transforms(meta, resized_res=None, augment_type="trivial"):
 
     num_channels = meta["num_channels"]
     if resized_res is not None:
-        print(f"get_augmented_transforms image reso is downsized from {meta["image_resolution"]} to {resized_res}")
+        print(f"get_augmented_transforms image reso is downsized from {meta['image_resolution']} to {resized_res}")
     else:
-        print(f"get_augmented_transforms image reso is not downsized {meta["image_resolution"]}")
+        print(f"get_augmented_transforms image reso is not downsized {meta['image_resolution']}")
 
     if num_channels == 1:
         normalize = transforms.Normalize((0.5,), (0.5,))
@@ -105,6 +106,7 @@ def get_augmented_transforms(meta, resized_res=None, augment_type="trivial"):
         pass  # no augmentation
 
     augment_ops.extend([
+        transforms.Grayscale(num_output_channels=1), 
         transforms.ToTensor(),
         normalize
     ])
