@@ -1,0 +1,18 @@
+2025-08-04 14:48:16,188 Running DARTS search on 'fashion'
+2025-08-04 14:48:16,188 args = namespace(data='/workspace/automl-exam-ss25-vision-freiburg-dreamcoders/data', batch_size=24, learning_rate=0.025, learning_rate_min=0.001, momentum=0.9, weight_decay=0.0003, report_freq=50, gpu=0, epochs=5, init_channels=8, layers=5, model_path='saved_models', cutout=False, cutout_length=16, drop_path_prob=0.2, save='search-EXP-20250804-144815', seed=0, grad_clip=5, train_portion=0.3, unrolled=False, arch_learning_rate=0.0003, arch_weight_decay=0.001, arch='DARTS', auxiliary=False, auxiliary_weight=0.4)
+2025-08-04 14:48:16,449 param size = 0.393778MB
+2025-08-04 14:48:17,387 epoch 0 lr 2.270820e-02
+2025-08-04 14:48:17,410 genotype = Genotype(normal=[('avg_pool_3x3', 0), ('dil_conv_5x5', 1), ('skip_connect', 0), ('max_pool_3x3', 1), ('avg_pool_3x3', 1), ('sep_conv_3x3', 2), ('max_pool_3x3', 1), ('sep_conv_5x5', 4)], normal_concat=range(2, 6), reduce=[('dil_conv_5x5', 1), ('dil_conv_3x3', 0), ('avg_pool_3x3', 1), ('avg_pool_3x3', 0), ('avg_pool_3x3', 1), ('skip_connect', 0), ('sep_conv_5x5', 2), ('dil_conv_5x5', 4)], reduce_concat=range(2, 6))
+2025-08-04 14:48:18,987 train 000 2.411240e+00 8.333333 45.833332
+2025-08-04 14:48:32,861 train 050 1.244925e+00 53.758168 94.199344
+2025-08-04 14:48:46,800 train 100 1.030986e+00 61.179866 96.575906
+2025-08-04 14:49:00,851 train 150 8.966104e-01 66.777040 97.488961
+2025-08-04 14:49:15,038 train 200 8.359018e-01 69.755387 97.864841
+2025-08-04 14:49:29,181 train 250 7.954953e-01 71.115536 98.207170
+2025-08-04 14:49:43,121 train 300 7.543697e-01 72.508303 98.380398
+2025-08-04 14:49:57,324 train 350 7.318463e-01 73.183758 98.528014
+2025-08-04 14:50:11,243 train 400 6.972963e-01 74.376556 98.701163
+2025-08-04 14:50:25,203 train 450 6.741463e-01 75.295637 98.752771
+2025-08-04 14:50:39,172 train 500 6.547060e-01 75.989685 98.843978
+2025-08-04 14:50:53,004 train 550 6.384128e-01 76.625829 98.895946
+2025-08-04 14:51:06,842 train 600 6.215989e-01 77.169992 98.953133

@@ -80,7 +80,8 @@ def load(model, model_path):
 def drop_path(x, drop_prob):
   if drop_prob > 0.:
     keep_prob = 1.-drop_prob
-    mask = Variable(torch.cuda.FloatTensor(x.size(0), 1, 1, 1).bernoulli_(keep_prob))
+    # mask = Variable(torch.cuda.FloatTensor(x.size(0), 1, 1, 1).bernoulli_(keep_prob)) -> using an outdated way to create CUDA tensors
+    mask = torch.bernoulli(torch.full((x.size(0), 1, 1, 1), keep_prob, device='cuda'))
     x.div_(keep_prob)
     x.mul_(mask)
   return x
@@ -111,3 +112,6 @@ def get_dynamic_transform(metadata, resize_to=32):
         to_tensor,
         normalize
     ])
+
+
+

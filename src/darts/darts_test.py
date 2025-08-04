@@ -10,16 +10,17 @@ from PIL import Image
 import pandas as pd
 from torch.utils.data import Dataset
 
-import utils
+from . import utils
 from .model import NetworkCIFAR as Network
 from .genotypes import Genotype
 
 
 class GenericImageDataset(Dataset):
-    def __init__(self, root, split="test", transform=None):
+    def __init__(self, root, split="test", transform=None, is_grayscale=False):
         self.root = root
         self.split = split
         self.transform = transform
+        self.is_grayscale = is_grayscale
         csv_path = os.path.join(root, f"{split}.csv")
         image_dir = os.path.join(root, f"images_{split}")
         self.df = pd.read_csv(csv_path)
@@ -30,9 +31,9 @@ class GenericImageDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        image_path = os.path.join(self.image_dir, row["file_name"])
+        image_path = os.path.join(self.image_dir, row["image_file_name"])
         label = int(row["label"])
-        image = Image.open(image_path)
+        image = Image.open(image_path).convert("L" if self.is_grayscale else "RGB")
         if self.transform:
             image = self.transform(image)
         return image, label
@@ -41,14 +42,20 @@ class GenericImageDataset(Dataset):
 def evaluate_on_test(dataset_name, best_architecture_params, save_dir):
     print("\n🧪 Evaluating final model on test set...")
 
-    metadata_path = os.path.join("data", dataset_name, f"dataset_analysis_{dataset_name}.json")
+    metadata_path = f"dataset_analysis_{dataset_name}.json"
     with open(metadata_path) as f:
         metadata = json.load(f)
 
-    class_count = metadata["n_classes"]
+    class_count = metadata["num_classes"]
+    is_grayscale = metadata.get("is_grayscale", False)
     transform = utils.get_dynamic_transform(metadata, resize_to=32)
 
-    test_data = GenericImageDataset(root=os.path.join("data", dataset_name), split="test", transform=transform)
+    test_data = GenericImageDataset(
+        root=os.path.join("data", dataset_name),
+        split="test",
+        transform=transform,
+        is_grayscale=is_grayscale
+    )
     test_loader = DataLoader(test_data, batch_size=64, shuffle=False, pin_memory=True, num_workers=4)
 
     genotype = Genotype(
@@ -77,7 +84,8 @@ def evaluate_on_test(dataset_name, best_architecture_params, save_dir):
         for images, labels in test_loader:
             images, labels = images.cuda(), labels.cuda()
             outputs = model(images)
-            preds = outputs.argmax(dim=1)
+            logits = outputs[0] if isinstance(outputs, tuple) else outputs
+            preds = logits.argmax(dim=1)
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 

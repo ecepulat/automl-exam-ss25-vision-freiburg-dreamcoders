@@ -103,19 +103,34 @@ def run_darts_arch_search(args, dataset_name):
     logging.info(f"Running DARTS search on '{dataset_name}'")
     logging.info("args = %s", args)
 
+    # train_transform, valid_transform = utils._data_transforms(dataset_name, args)
+    project_root = Path(__file__).resolve().parents[2]
+    metadata_path = project_root / f"dataset_analysis_{dataset_name}.json"
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+
     criterion = nn.CrossEntropyLoss().cuda()
-    model = Network(args.init_channels, 10, args.layers, criterion).cuda()
+    input_channels = 1 if metadata.get("is_grayscale", False) else 3
+    num_classes = metadata["num_classes"]
+    model = Network(args.init_channels, num_classes, args.layers, criterion, input_channels=input_channels).cuda()
 
     logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
+    # Define the optimizer AFTER model is created
     optimizer = torch.optim.SGD(model.parameters(), args.learning_rate,
-                                momentum=args.momentum, weight_decay=args.weight_decay)
+                            momentum=args.momentum, weight_decay=args.weight_decay)
 
-    train_transform, valid_transform = utils._data_transforms_fashion(args)
+    # Use metadata-defined resolution
+    resize_to = metadata.get("resolution", 32)
 
-    metadata_path = os.path.join(args.data, dataset_name, f"dataset_analysis_{dataset_name}.json")
-    with open(metadata_path, "r") as f:
-        metadata = json.load(f)
+    # Use the general transform from utils
+    train_transform = utils.get_dynamic_transform(metadata, resize_to=resize_to)
+
+    # Optionally add Cutout for small images
+    if args.cutout and resize_to <= 32:
+        train_transform.transforms.append(utils.Cutout(args.cutout_length))
+
+    valid_transform = utils.get_dynamic_transform(metadata, resize_to=resize_to)
 
     df = pd.read_csv(os.path.join(args.data, dataset_name, "train.csv"))
     images_path = os.path.join(args.data, dataset_name, "images_train")
@@ -210,10 +225,10 @@ def darts_arch_search(dataset_name: str):
     best_val_acc, best_genotype = run_darts_arch_search(args, dataset_name)
 
     genotype_dict = {
-        "normal": best_genotype.normal,
-        "normal_concat": best_genotype.normal_concat,
-        "reduce": best_genotype.reduce,
-        "reduce_concat": best_genotype.reduce_concat
+    "normal": best_genotype.normal,
+    "normal_concat": list(best_genotype.normal_concat),
+    "reduce": best_genotype.reduce,
+    "reduce_concat": list(best_genotype.reduce_concat)
     }
 
     print(f"\n🎯 Best validation accuracy: {best_val_acc:.2f}%")

@@ -15,7 +15,7 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader, Subset
 from sklearn.model_selection import train_test_split
 
-import utils
+from . import utils
 from .model import NetworkCIFAR as Network
 from .genotypes import Genotype
 from .darts_test import evaluate_on_test
@@ -38,7 +38,7 @@ class GenericImageDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        image_path = os.path.join(self.image_dir, row["file_name"])
+        image_path = os.path.join(self.image_dir, row["image_file_name"])
         label = int(row["label"])
 
         image = Image.open(image_path)
@@ -58,7 +58,8 @@ def train(train_queue, model, criterion, optimizer, args):
         target = target.cuda(non_blocking=True)
 
         optimizer.zero_grad()
-        logits = model(input)
+        output = model(input)
+        logits = output[0] if isinstance(output, tuple) else output
         loss = criterion(logits, target)
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
@@ -85,7 +86,9 @@ def infer(valid_queue, model, criterion, args):
             input = input.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
 
-            logits = model(input)
+            output = model(input) #  to unpack the model's output if it's a tuple (which happens when auxiliary logits are returned)
+            logits = output[0] if isinstance(output, tuple) else output
+
             loss = criterion(logits, target)
 
             prec1 = utils.accuracy(logits, target, topk=(1,))[0]
@@ -129,7 +132,7 @@ def full_train(dataset_name, best_architecture_params, best_hpo_params, class_co
         weight_decay=best_hpo_params["weight_decay"],
         report_freq=50,
         gpu=0,
-        epochs=70,
+        epochs=5,  # 🔧 Reduced from 70 for testing
         init_channels=36,
         layers=20,
         model_path='saved_models',
@@ -164,7 +167,8 @@ def full_train(dataset_name, best_architecture_params, best_hpo_params, class_co
         weight_decay=args.weight_decay
     )
 
-    metadata_path = os.path.join(args.data, dataset_name, f"dataset_analysis_{dataset_name}.json")
+    metadata_path = os.path.join(f"dataset_analysis_{dataset_name}.json")
+
     with open(metadata_path) as f:
         metadata = json.load(f)
 
@@ -212,7 +216,11 @@ def full_train(dataset_name, best_architecture_params, best_hpo_params, class_co
                 break
 
     print(f"\n✅ Final validation accuracy: {best_valid_acc:.2f}%")
+    logging.info("Best validation accuracy: %.2f%%", best_valid_acc)
     
+    # ✅ Save model weights before test evaluation
+    torch.save(model.state_dict(), os.path.join(save_dir, "weights.pt"))
+
     # 🧪 Evaluate on test set
     evaluate_on_test(
         dataset_name=dataset_name,

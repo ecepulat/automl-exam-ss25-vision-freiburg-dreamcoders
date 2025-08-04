@@ -57,10 +57,9 @@ class Cell(nn.Module):
 
     return torch.cat(states[-self._multiplier:], dim=1)
 
-
 class Network(nn.Module):
 
-  def __init__(self, C, num_classes, layers, criterion, steps=4, multiplier=4, stem_multiplier=3):
+  def __init__(self, C, num_classes, layers, criterion, input_channels=3, steps=4, multiplier=4, stem_multiplier=3):
     super(Network, self).__init__()
     self._C = C
     self._num_classes = num_classes
@@ -70,11 +69,13 @@ class Network(nn.Module):
     self._multiplier = multiplier
 
     C_curr = stem_multiplier*C
+    self._input_channels = input_channels
+
     self.stem = nn.Sequential(
-      nn.Conv2d(1, C_curr, 3, padding=1, bias=False),
-      nn.BatchNorm2d(C_curr)
+    nn.Conv2d(input_channels, C_curr, 3, padding=1, bias=False),  # now dynamic
+    nn.BatchNorm2d(C_curr)
     )
- 
+
     C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
     self.cells = nn.ModuleList()
     reduction_prev = False
@@ -95,9 +96,17 @@ class Network(nn.Module):
     self._initialize_alphas()
 
   def new(self):
-    model_new = Network(self._C, self._num_classes, self._layers, self._criterion).cuda()
+    model_new = Network(
+        self._C,
+        self._num_classes,
+        self._layers,
+        self._criterion,
+        input_channels=self._input_channels  # dynamic now
+    ).cuda()
+
     for x, y in zip(model_new.arch_parameters(), self.arch_parameters()):
         x.data.copy_(y.data)
+
     return model_new
 
   def forward(self, input):

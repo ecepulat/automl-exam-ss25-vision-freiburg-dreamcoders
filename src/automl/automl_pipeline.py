@@ -10,6 +10,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from darts.darts_train_search import darts_arch_search
 from darts.darts_hpo import run_darts_hpo
 from darts.darts_train import full_train
+from checkpoints import save_checkpoint, load_checkpoint
 import time
 
 def format_time(seconds):
@@ -31,6 +32,9 @@ def main():
     total_start = time.time()
     #Analyze the dataset to get resolution
     metadata = analyze_dataset(dataset_name)
+    metadata_path = Path(f"dataset_analysis_{dataset_name}.json")
+    class_count = metadata["num_classes"]
+
 
     width, height = metadata.get("image_resolution", (0, 0))
     resolution_product = width * height
@@ -42,37 +46,86 @@ def main():
         start = time.time()
         best_architecture_params = optuna_arch_search(dataset_name)
         architecture_time = time.time() - start
-
+      
         start = time.time()
         best_param_hpo = run_hpo(dataset_name, best_architecture_params)
         hpo_time = time.time() - start
+
         start = time.time()
         final_train(dataset_name=dataset_name,
             best_architecture_params=best_architecture_params,
             best_hpo_params=best_param_hpo)
         final_train_time = time.time() - start
-      
+       
     else:
         print("[DECISION] Using DARTS search strategy")
-        start = time.time()
-        print("[DEBUG] Starting darts_arch_search()...")
-        best_architecture_params=darts_arch_search(dataset_name) # Finding best architecture using hard coded hyperparams
-        architecture_time = time.time() - start
-        print(f"[DEBUG] Got genotype: {best_architecture_params}")
+        checkpoint = load_checkpoint()
+        """
+        if checkpoint and checkpoint.get("last_stage") == "search":
+            print("[CHECKPOINT] Skipping architecture search — loading saved genotype.")
+            best_architecture_params = checkpoint["genotype"]
+        else:
+            print("[DEBUG] Starting darts_arch_search()...")
+            start = time.time()
+            best_architecture_params = darts_arch_search(dataset_name)
+            architecture_time = time.time() - start
+            save_checkpoint("search", genotype=best_architecture_params)
+            print(f"[DEBUG] Got genotype: {best_architecture_params}")
+            print(f"[TIMING] Architecture search took {architecture_time:.2f} seconds")
 
-        print("[DEBUG] Starting run_darts_hpo()...")
-        start = time.time()
-        best_param_hpo= run_darts_hpo() # Finding best hyperparams for the full training
-        hpo_time = time.time() - start
-        print(f"[DEBUG] Got HPO params: {best_param_hpo}")
+        if checkpoint and checkpoint.get("last_stage") == "hpo":
+            print("[CHECKPOINT] Skipping HPO — loading saved HPO params.")
+            best_param_hpo = checkpoint["hpo_params"]
+        else:
+            print("[DEBUG] Starting run_darts_hpo()...")
+            start = time.time()
+            best_param_hpo = run_darts_hpo(dataset_name, best_architecture_params, metadata_path)
+            hpo_time = time.time() - start
+            save_checkpoint("hpo", genotype=best_architecture_params, hpo_params=best_param_hpo)
+            print(f"[DEBUG] Got HPO params: {best_param_hpo}")
+            print(f"[TIMING] HPO took {hpo_time:.2f} seconds")
+        """
+
+        # Load genotype and HPO params from checkpoint if available
+        if checkpoint and checkpoint.get("last_stage") == "hpo":
+            print("[CHECKPOINT] Skipping architecture search and HPO — loading saved genotype and HPO params.")
+            best_architecture_params = checkpoint["genotype"]
+            best_param_hpo = checkpoint["hpo_params"]
+
+        else:
+            # ARCHITECTURE SEARCH
+            if checkpoint and checkpoint.get("last_stage") == "search":
+                print("[CHECKPOINT] Skipping architecture search — loading saved genotype.")
+                best_architecture_params = checkpoint["genotype"]
+            else:
+                print("[DEBUG] Starting darts_arch_search()...")
+                start = time.time()
+                best_architecture_params = darts_arch_search(dataset_name)
+                architecture_time = time.time() - start
+                save_checkpoint("search", genotype=best_architecture_params)
+                print(f"[DEBUG] Got genotype: {best_architecture_params}")
+                print(f"[TIMING] Architecture search took {architecture_time:.2f} seconds")
+
+            # HPO
+            print("[DEBUG] Starting run_darts_hpo()...")
+            start = time.time()
+            best_param_hpo = run_darts_hpo(dataset_name, best_architecture_params, metadata_path)
+            hpo_time = time.time() - start
+            save_checkpoint("hpo", genotype=best_architecture_params, hpo_params=best_param_hpo)
+            print(f"[DEBUG] Got HPO params: {best_param_hpo}")
+            print(f"[TIMING] HPO took {hpo_time:.2f} seconds")
 
         print("[DEBUG] Starting full_train()...")
         start = time.time()
-        full_train(dataset_name=dataset_name,
+        full_train(
+            dataset_name=dataset_name,
             best_architecture_params=best_architecture_params,
-            best_hpo_params=best_param_hpo)
+            best_hpo_params=best_param_hpo,
+            class_count=class_count
+        )
         final_train_time = time.time() - start
-        print("[DEBUG] Training complete.")
+        print(f"[TIMING] Final training took {final_train_time:.2f} seconds")
+
 
     total_time = time.time() - total_start
     with open("time_pipeline.log", "w") as f:

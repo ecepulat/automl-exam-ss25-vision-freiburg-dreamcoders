@@ -1,0 +1,3 @@
+2025-08-04 08:08:42,031 Running DARTS search on 'fashion'
+2025-08-04 08:08:42,031 args = namespace(data='/workspace/automl-exam-ss25-vision-freiburg-dreamcoders/data', batch_size=24, learning_rate=0.025, learning_rate_min=0.001, momentum=0.9, weight_decay=0.0003, report_freq=50, gpu=0, epochs=5, init_channels=8, layers=5, model_path='saved_models', cutout=False, cutout_length=16, drop_path_prob=0.2, save='search-EXP-20250804-080841', seed=0, grad_clip=5, train_portion=0.3, unrolled=False, arch_learning_rate=0.0003, arch_weight_decay=0.001, arch='DARTS', auxiliary=False, auxiliary_weight=0.4)
+2025-08-04 08:08:42,303 param size = 0.393778MB

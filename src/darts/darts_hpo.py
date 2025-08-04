@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import train_test_split
 import optuna
 import numpy as np
+from tqdm import tqdm
 
 from . import utils
 from .model import NetworkCIFAR as Network
@@ -34,13 +35,12 @@ class GenericImageDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        image_path = os.path.join(self.image_dir, row["file_name"])
+        image_path = os.path.join(self.image_dir, row["image_file_name"])
         label = int(row["label"])
         image = Image.open(image_path)
         if self.transform:
             image = self.transform(image)
         return image, label
-
 
 def train(train_queue, model, criterion, optimizer, args):
     objs = utils.AvgrageMeter()
@@ -50,7 +50,8 @@ def train(train_queue, model, criterion, optimizer, args):
         input = input.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
         optimizer.zero_grad()
-        logits = model(input)
+        output = model(input)
+        logits = output[0] if isinstance(output, tuple) else output
         loss = criterion(logits, target)
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
@@ -61,7 +62,6 @@ def train(train_queue, model, criterion, optimizer, args):
         top1.update(prec1.item(), n)
     return top1.avg
 
-
 def infer(valid_queue, model, criterion, args):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -70,7 +70,8 @@ def infer(valid_queue, model, criterion, args):
         for step, (input, target) in enumerate(valid_queue):
             input = input.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
-            logits = model(input)
+            output = model(input)
+            logits = output[0] if isinstance(output, tuple) else output
             loss = criterion(logits, target)
             prec1 = utils.accuracy(logits, target, topk=(1,))[0]
             n = input.size(0)
@@ -79,11 +80,17 @@ def infer(valid_queue, model, criterion, args):
     return top1.avg
 
 
-def run_darts_hpo(dataset_name, best_architecture_params):
-    metadata_path = os.path.join("data", dataset_name, f"dataset_analysis_{dataset_name}.json")
+def run_darts_hpo(dataset_name, best_architecture_params, metadata_path=None):
+
+    if metadata_path is None:
+        metadata_path = f"dataset_analysis_{dataset_name}.json"
+
     with open(metadata_path) as f:
         metadata = json.load(f)
-    class_count = metadata["n_classes"]
+
+    # class_count = metadata["n_classes"]
+    class_count = metadata.get("num_classes", metadata.get("n_classes"))
+
     transform = utils.get_dynamic_transform(metadata, resize_to=32)
     full_data = GenericImageDataset(root=os.path.join("data", dataset_name), split="train", transform=transform)
     train_indices, val_indices = train_test_split(
@@ -96,15 +103,17 @@ def run_darts_hpo(dataset_name, best_architecture_params):
     valid_data = Subset(full_data, val_indices)
 
     def objective(trial):
+        print(f"[Optuna] Trial {trial.number + 1}")
+
         args = SimpleNamespace(
-            batch_size=trial.suggest_categorical("batch_size", [32, 64, 96]),
-            lr=trial.suggest_loguniform("lr", 1e-3, 0.1),
-            weight_decay=trial.suggest_loguniform("weight_decay", 1e-5, 5e-3),
-            drop_path_prob=trial.suggest_uniform("drop_path_prob", 0.0, 0.4),
+            batch_size = trial.suggest_categorical("batch_size", [64, 96]),
+            lr = trial.suggest_float("lr", 1e-2, 0.1, log=True),  # Start from higher LR
+            weight_decay=trial.suggest_float("weight_decay", 1e-5, 5e-3, log=True),
+            drop_path_prob=trial.suggest_float("drop_path_prob", 0.0, 0.4),
             grad_clip=5,
             report_freq=50,
             gpu=0,
-            epochs=20
+            epochs=5 # Was 20 before
         )
 
         torch.cuda.set_device(args.gpu)
@@ -120,7 +129,7 @@ def run_darts_hpo(dataset_name, best_architecture_params):
             reduce_concat=best_architecture_params["reduce_concat"]
         )
 
-        model = Network(36, class_count, 20, False, genotype).cuda()
+        model = Network(24, class_count, 20, False, genotype).cuda() # It was 36 before
         criterion = nn.CrossEntropyLoss().cuda()
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
         train_queue = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4)
@@ -132,10 +141,22 @@ def run_darts_hpo(dataset_name, best_architecture_params):
             train_acc = train(train_queue, model, criterion, optimizer, args)
             val_acc = infer(valid_queue, model, criterion, args)
             best_val_acc = max(best_val_acc, val_acc)
+            print(f"Epoch {epoch+1}/{args.epochs} | Val Acc: {val_acc:.2f}")
         return best_val_acc
 
+    n_trials = 5
+    pbar = tqdm(total=n_trials)
+
+    def callback(study, trial):
+        pbar.set_description(f"Trial {trial.number + 1} | Best: {study.best_value:.2f}")
+        pbar.update(1)
+
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=20)
+    optuna.logging.set_verbosity(optuna.logging.INFO)
+    study.optimize(objective, n_trials=n_trials, callbacks=[callback])
+
+    pbar.close()
+
 
     print("\n🏆 Best DARTS HPO configuration:")
     for k, v in study.best_params.items():

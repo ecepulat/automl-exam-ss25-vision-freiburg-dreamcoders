@@ -182,4 +182,8 @@ class FashionDataset(BaseVisionDataset):
         return True  # override temporarily to skip the check
 
 
+# Download all datasets
+emotions = EmotionsDataset(root="data", download=True)
+flowers = FlowersDataset(root="data", download=True)
+fashion = FashionDataset(root="data", download=True)
 
