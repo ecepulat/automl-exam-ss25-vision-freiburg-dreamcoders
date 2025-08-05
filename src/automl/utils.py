@@ -4,6 +4,10 @@ from torchvision import transforms
 from torchvision.transforms import TrivialAugmentWide
 from torchvision.transforms import RandAugment
 
+from torchvision import transforms
+
+
+
 def calculate_mean_std(dataset_class: Any):
     """Calculate the mean and standard deviation of the entire image dataset."""
     mean = 0.
@@ -94,10 +98,8 @@ def get_augmented_transforms(meta, resized_res=None, augment_type="trivial"):
     augment_ops = [transforms.Resize(image_size)]
 
     if augment_type == "trivial":
-        from torchvision.transforms import TrivialAugmentWide
         augment_ops.append(TrivialAugmentWide(num_magnitude_bins=31))
     elif augment_type == "rand":
-        from torchvision.transforms import RandAugment
         augment_ops.append(RandAugment())
     elif augment_type == "none":
         pass  # no augmentation

@@ -14,6 +14,7 @@ from data_analyze import analyze_dataset
 from tqdm import tqdm
 from PIL import Image
 import sys
+from torch.utils.data import Dataset
 import subprocess
 import optuna.visualization.matplotlib as vis
 import time
@@ -25,9 +26,11 @@ from utils import get_default_transforms
 import optuna
 
 
+
 import json
+
 class QuickTrain:
-    def __init__(self, dataset_name, batch_size=32, epochs=4, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, track_metrics=True):
+    def __init__(self, dataset_name, batch_size=32, epochs=4, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False):
         self.dataset_name = dataset_name
         self.architecture_params = architecture_params  # Best Arch found in NAS
         self.batch_size = batch_size
@@ -44,7 +47,7 @@ class QuickTrain:
 
         analyze_dataset(self.dataset_name, min_samples_per_class=self.min_samples_per_class)
         self._load_metadata()
-        self._prepare_data()
+        self._prepare_data(test_mode=test_mode)
         self._init_model()
         self.optimizer = self._init_optimizer(optimizer_name)
         self.weight_decay = weight_decay  # passed in from trial
@@ -77,7 +80,7 @@ class QuickTrain:
 
 
     
-    def _prepare_data(self):
+    def _prepare_data(self, test_mode =False):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", self.dataset_name))
         
         # Load CSVs
@@ -107,12 +110,30 @@ class QuickTrain:
 
         # Step 4: Prepare fixed test set (for final evaluation only)
         test_transform = get_default_transforms(self.metadata)
-        test_data = [
-            (test_transform(Image.open(os.path.join(test_images_path, row['image_file_name'])).convert("RGB")), int(row['label']))
-            for _, row in test_df.iterrows()
-        ]
-        self.test_loader = DataLoader(test_data, batch_size=self.batch_size, shuffle=False)
 
+
+        if test_mode:
+            # Unlabeled test set
+            self.test_loader = DataLoader(
+                TestImageDataset(test_df, test_images_path, metadata=self.metadata, transform=test_transform),
+                batch_size=self.batch_size, shuffle=False
+            )
+        else:
+            # Labeled test set (for local evaluation)
+            test_data = [
+                (
+                    test_transform(Image.open(os.path.join(test_images_path, row['image_file_name'])).convert(
+                        "RGB" if self.metadata.get("num_channels", 3) == 3 else "L"
+                    )),
+                    int(row['label'])
+                )
+                for _, row in test_df.iterrows()
+            ]
+            self.test_loader = DataLoader(test_data, batch_size=self.batch_size, shuffle=False)
+
+
+
+        
         print(f"🧪 Training on {len(self.train_loader.dataset)} samples. Validation on {len(self.val_loader.dataset)} samples.")
     def evaluate_val(self):
         print("🧪 Evaluating on validation set...")
@@ -195,6 +216,30 @@ class QuickTrain:
             f.write(report + "\n")
 
         return acc
+
+    def generate_test_predictions(self, save_path="data/exam_dataset/predictions.npy"):
+        """
+        Runs inference on self.test_loader and saves predictions.
+        Assumes _prepare_data() has already set up the loader.
+        """
+        preds = []
+        self.model.eval()
+
+        with torch.no_grad():
+            for batch in tqdm(self.test_loader, desc="Generating predictions"):
+                if isinstance(batch, (list, tuple)):  # (image, label) for labeled sets
+                    images = batch[0]
+                else:  # image only for unlabeled sets
+                    images = batch
+                images = images.to(self.device)
+                outputs = self.model(images)
+                preds.extend(outputs.argmax(1).cpu().numpy())
+
+        preds = np.array(preds, dtype=np.int64)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        np.save(save_path, preds)
+        print(f"✅ Predictions saved to {save_path} — shape: {preds.shape}")
+
 
 
     def full_train(self):
@@ -285,9 +330,15 @@ class QuickTrain:
         total_time = time.time() - start_time
         with open(self.LOG_FILE, "a") as f:
             f.write(f"\n⏱️ Total Training Time: {total_time:.2f} seconds\n")
+        model_save_path = os.path.join("checkpoints", f"{self.model_name}_{self.dataset_name}_final.pth")
+        os.makedirs("checkpoints", exist_ok=True)
+        torch.save(self.model.state_dict(), model_save_path)
 
+        with open(self.LOG_FILE, "a") as f:
+            f.write(f"💾 Saved final trained model to {model_save_path}\n")
 
-
+        return self
+    
     def train(self):
         print("🚀 Starting training...")
         if torch.cuda.is_available():
@@ -340,6 +391,34 @@ class QuickTrain:
         total_time = time.time() - start_time
         with open(self.LOG_FILE, "a") as f:
             f.write(f"\n⏱️ Total Training Time: {total_time:.2f} seconds\n")
+
+
+class TestImageDataset(Dataset):
+    def __init__(self, csv_df, images_dir, metadata, transform=None):
+        """
+        Args:
+            csv_df (DataFrame): test.csv dataframe
+            images_dir (str): path to images_test folder
+            metadata (dict): dataset metadata containing 'num_channels'
+            transform: torchvision transforms
+        """
+        self.df = csv_df
+        self.images_dir = images_dir
+        self.metadata = metadata
+        self.transform = transform
+
+        # Decide image mode based on metadata channels
+        self.image_mode = "RGB" if self.metadata.get("num_channels", 3) == 3 else "L"
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        img_path = os.path.join(self.images_dir, self.df.iloc[idx]['image_file_name'])
+        image = Image.open(img_path).convert(self.image_mode)  # mode based on channels
+        if self.transform:
+            image = self.transform(image)
+        return image
 
 
       
@@ -456,32 +535,8 @@ def run_hpo(dataset_name, architecture_params):
     plt.gcf().savefig(f"plots/{dataset_name}_optuna_importance.png", dpi=300, bbox_inches='tight')
     plt.clf()
 
-    # Parallel coordinate plot with readable text
-    fig = vis.plot_parallel_coordinate(
-        study,
-        params=["batch_size", "lr", "min_samples_per_class", "optimizer", "weight_decay"]
-    )
-    fig.set_size_inches(10, 6)
-    plt.xticks(fontsize=10, rotation=20)
-    plt.yticks(fontsize=10)
-    plt.tight_layout()
-    plt.savefig("flowers_optuna_parallel.png", dpi=300)
+   
 
-
-    # Slice plot
-    fig = vis.plot_slice(study, params=["batch_size", "lr", "min_samples_per_class", "optimizer", "weight_decay"])
-    fig.set_size_inches(12, 4)  # wider canvas
-    plt.tight_layout()
-
-    # Tweak fonts and rotations for all subplots
-    for ax in fig.axes:
-        for label in ax.get_xticklabels():
-            label.set_rotation(30)
-            label.set_fontsize(8)
-        for label in ax.get_yticklabels():
-            label.set_fontsize(8)
-
-    plt.savefig("flowers_optuna_slice.png", dpi=300)
 
 
 
