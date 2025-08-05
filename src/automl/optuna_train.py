@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.metrics import classification_report
 from optuna_hpo import QuickTrain
 
-def final_train(dataset_name, best_architecture_params, best_hpo_params):
+def final_train(dataset_name, best_architecture_params, best_hpo_params, test_mode=False)-> QuickTrain:
     print("\n🚀 Retraining final model with best parameters...")
 
     final_trainer = QuickTrain(
@@ -14,7 +14,7 @@ def final_train(dataset_name, best_architecture_params, best_hpo_params):
         architecture_params=best_architecture_params,  # 👈 from NAS
         min_samples_per_class=best_hpo_params["min_samples_per_class"],
         batch_size=best_hpo_params["batch_size"],
-        epochs=30,  # Longer training
+        epochs=1,  # Longer training
         learning_rate=best_hpo_params["lr"],
         optimizer_name=best_hpo_params["optimizer"],
         weight_decay=best_hpo_params["weight_decay"],
@@ -24,5 +24,9 @@ def final_train(dataset_name, best_architecture_params, best_hpo_params):
     )
 
     final_trainer.full_train()
-    final_trainer.evaluate_test()
+    if not test_mode:
+            final_trainer.evaluate_test()  # ✅ safe only in non-test mode
+
+    return final_trainer
+
 

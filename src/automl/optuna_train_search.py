@@ -186,7 +186,7 @@ def objective(trial, dataset_name="flowers"):
         criterion = nn.CrossEntropyLoss()
         
         # Training loop (5 epochs)
-        for epoch in range(5):
+        for epoch in range(1):
             start = time.time()
             print(f"trial : {trial.number} epoch : {epoch}")
             model.train()
@@ -258,7 +258,7 @@ def optuna_arch_search(dataset_name):
     study.optimize(
     lambda trial: objective(trial, dataset_name),
     callbacks=[print_current_trial],
-    timeout=3 * 3600 #3hours NAS
+    n_trials=1 #3hours NAS
 )
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)

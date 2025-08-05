@@ -30,7 +30,7 @@ import optuna
 import json
 
 class QuickTrain:
-    def __init__(self, dataset_name, batch_size=32, epochs=4, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False):
+    def __init__(self, dataset_name, batch_size=32, epochs=2, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False):
         self.dataset_name = dataset_name
         self.architecture_params = architecture_params  # Best Arch found in NAS
         self.batch_size = batch_size
@@ -186,7 +186,7 @@ class QuickTrain:
             dropout=dropout,
             pool_type=pool_type,
             num_classes=self.metadata["num_classes"],
-            input_resolution=(512, 512)
+            input_resolution=tuple(self.metadata["image_resolution"])
         ).to(self.device)
 
         self.criterion = nn.CrossEntropyLoss()
@@ -459,7 +459,7 @@ def objective(trial, dataset_name, architecture_params):
             architecture_params=architecture_params,
             min_samples_per_class=min_samples,
             batch_size=batch_size,
-            epochs=4,
+            epochs=2,
             learning_rate=lr,
             optimizer_name=optimizer_name
         )
@@ -501,7 +501,7 @@ def run_hpo(dataset_name, architecture_params):
 
     # Start the HPO process
     study.optimize(lambda trial: objective(trial, dataset_name, architecture_params), 
-    timeout=2*3600) #2hours HPO
+    n_trials=2) #2hours HPO
 
     # ✅ Log the best trial
     print("\n✅ Best trial:")

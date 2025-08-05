@@ -1,6 +1,6 @@
 import argparse
 import sys
-
+from pathlib import Path
 from data_analyze import analyze_dataset
 from optuna_hpo import run_hpo
 from optuna_train_search import optuna_arch_search
@@ -70,6 +70,14 @@ def main():
             best_architecture_params=best_architecture_params,
             best_hpo_params=best_param_hpo, test_mode = test_flag)
         final_train_time = time.time() - start
+
+        os.makedirs(data_dir, exist_ok=True)
+    
+        if test_flag:
+            trainer.generate_test_predictions(
+
+            save_path = os.path.join(data_dir, "predictions.npy")
+        )
        
     else:
         print("[DECISION] Using DARTS search strategy")
@@ -104,12 +112,7 @@ def main():
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     data_dir = os.path.join(project_root, "data", "exam_dataset")
 
-    os.makedirs(data_dir, exist_ok=True)
-    if test_flag:
-        trainer.generate_test_predictions(
 
-            save_path = os.path.join(data_dir, "predictions.npy")
-        )
 
     with open("time_pipeline.log", "w") as f:
         f.write("Time Pipeline Summary:\n")
