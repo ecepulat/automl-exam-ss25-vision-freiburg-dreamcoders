@@ -1,0 +1,87 @@
+{
+  "dataset": "emotions",
+  "genotype": {
+    "normal": [
+      [
+        "dil_conv_3x3",
+        1
+      ],
+      [
+        "skip_connect",
+        0
+      ],
+      [
+        "skip_connect",
+        2
+      ],
+      [
+        "max_pool_3x3",
+        0
+      ],
+      [
+        "skip_connect",
+        3
+      ],
+      [
+        "skip_connect",
+        2
+      ],
+      [
+        "skip_connect",
+        2
+      ],
+      [
+        "skip_connect",
+        3
+      ]
+    ],
+    "normal_concat": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "reduce": [
+      [
+        "sep_conv_5x5",
+        1
+      ],
+      [
+        "max_pool_3x3",
+        0
+      ],
+      [
+        "max_pool_3x3",
+        1
+      ],
+      [
+        "skip_connect",
+        2
+      ],
+      [
+        "max_pool_3x3",
+        1
+      ],
+      [
+        "max_pool_3x3",
+        0
+      ],
+      [
+        "skip_connect",
+        3
+      ],
+      [
+        "skip_connect",
+        2
+      ]
+    ],
+    "reduce_concat": [
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "val_accuracy": 53.55843277715496,
+  "timestamp": "2025-08-05 12:39:20"
+}

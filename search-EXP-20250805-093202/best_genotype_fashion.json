@@ -1,0 +1,87 @@
+{
+  "dataset": "fashion",
+  "genotype": {
+    "normal": [
+      [
+        "dil_conv_3x3",
+        1
+      ],
+      [
+        "skip_connect",
+        0
+      ],
+      [
+        "sep_conv_5x5",
+        2
+      ],
+      [
+        "sep_conv_3x3",
+        0
+      ],
+      [
+        "dil_conv_5x5",
+        0
+      ],
+      [
+        "dil_conv_3x3",
+        3
+      ],
+      [
+        "dil_conv_3x3",
+        1
+      ],
+      [
+        "sep_conv_3x3",
+        3
+      ]
+    ],
+    "normal_concat": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "reduce": [
+      [
+        "avg_pool_3x3",
+        0
+      ],
+      [
+        "avg_pool_3x3",
+        1
+      ],
+      [
+        "avg_pool_3x3",
+        0
+      ],
+      [
+        "skip_connect",
+        2
+      ],
+      [
+        "sep_conv_5x5",
+        2
+      ],
+      [
+        "max_pool_3x3",
+        0
+      ],
+      [
+        "dil_conv_5x5",
+        4
+      ],
+      [
+        "skip_connect",
+        2
+      ]
+    ],
+    "reduce_concat": [
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "val_accuracy": 92.10237830461774,
+  "timestamp": "2025-08-05 10:50:38"
+}
