@@ -1,12 +1,11 @@
 {
-  "trial_number": 0,
-  "value": 0.4934895833333333,
+  "trial_number": 2,
+  "value": 0.46984126984126984,
   "params": {
     "optimizer": "Adam",
     "lr": 0.0001,
     "weight_decay": 0.0001,
     "min_samples_per_class": 200,
-    "batch_size": 16,
-    "oversample_factor": 3.3241808364345697
+    "batch_size": 32
   }
 }

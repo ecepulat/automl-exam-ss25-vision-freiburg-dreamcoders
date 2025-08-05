@@ -18,8 +18,8 @@ def final_train(dataset_name, best_architecture_params, best_hpo_params, test_mo
         learning_rate=best_hpo_params["lr"],
         optimizer_name=best_hpo_params["optimizer"],
         weight_decay=best_hpo_params["weight_decay"],
-        test_mode=test_mode,
-        oversample_factor=best_hpo_params["oversample_factor"] 
+        test_mode=test_mode
+
 
     )
 

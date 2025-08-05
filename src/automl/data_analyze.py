@@ -182,7 +182,7 @@ def get_oversampled_classes(class_counts, detect_factor=2.0, limit_factor=3.0):
             }
     return oversampled
 
-def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_per_class: int = 150):
+def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_per_class: int = 200):
     print("Analyze dataset started")
     project_root = Path(__file__).resolve().parents[2]
     dataset_path = project_root / "data" / dataset_name

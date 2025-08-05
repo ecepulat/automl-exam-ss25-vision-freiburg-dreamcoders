@@ -24,13 +24,12 @@ from collections import Counter
 from sklearn.metrics import classification_report
 from utils import get_default_transforms
 import optuna
-from data_analyze import get_oversampled_classes
 import traceback
 from random import sample
 import json
-
+from torch.utils.data import WeightedRandomSampler
 class QuickTrain:
-    def __init__(self, dataset_name, batch_size=32, epochs=2, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False, oversample_factor=2.0):
+    def __init__(self, dataset_name, batch_size=32, epochs=3, model_name="custom", config_path=None, min_samples_per_class=200, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False):
         self.dataset_name = dataset_name
         self.architecture_params = architecture_params  # Best Arch found in NAS
         self.batch_size = batch_size
@@ -41,7 +40,7 @@ class QuickTrain:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.min_samples_per_class = min_samples_per_class
         self.LOG_FILE = "hpo_all_trials.log"
-        self.oversample_factor = oversample_factor 
+     
 
         with open(self.LOG_FILE, "a") as f:
             f.write(f"📝 Training Log for {self.model_name} on {self.dataset_name}\n\n")
@@ -81,98 +80,132 @@ class QuickTrain:
 
 
     
+    from torch.utils.data import WeightedRandomSampler
     def _prepare_data(self, test_mode=False):
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", self.dataset_name))
-        
-        # Step 0: Load CSV
+        """
+        Prepares train, validation, and test loaders.
+        Uses augmentation for undersampled classes and WeightedRandomSampler
+        to balance batches in the training loader, while keeping the validation
+        set stratified (balanced by class proportions).
+        """
+
+
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", self.dataset_name))        # ------------------------------------------------------
+        # STEP 0: Load CSVs for training and testing
+        # ------------------------------------------------------
         df = pd.read_csv(os.path.join(base_path, "train.csv"))
         test_df = pd.read_csv(os.path.join(base_path, "test.csv"))
         images_path = os.path.join(base_path, "images_train")
         test_images_path = os.path.join(base_path, "images_test")
 
-        # Step 0.5: Detect oversampled classes in the *original* dataset
-        class_counts_before = dict(Counter(df["label"]))
-        oversampled_info = get_oversampled_classes(class_counts_before, detect_factor=self.oversample_factor)
-        # BEFORE downsampling
-        with open("class_distribution.log", "a") as f:
-            f.write("\n📊 BEFORE oversample removal:\n")
-            for cls, count in sorted(class_counts_before.items()):
-                f.write(f"  Class {cls}: {count} samples\n")
-        # If oversampled classes exist, drop a fraction
-        for cls, info in oversampled_info.items():
-            cls = int(cls)
-            cls_indices = df[df["label"] == cls].index.tolist()
-            n_remove = int(info["remove_fraction"] * info["current_count"])
-            drop_indices = np.random.choice(cls_indices, size=n_remove, replace=False)
-            df = df.drop(drop_indices)
-
-        # AFTER downsampling
-        with open("class_distribution.log", "a") as f:
-            f.write("\n📊 AFTER oversample removal:\n")
-            for cls, count in sorted(dict(Counter(df['label'])).items()):
-                f.write(f"  Class {cls}: {count} samples\n")
-
-        # Step 1: Now create balanced dataset from the reduced df
+        # ------------------------------------------------------
+        # STEP 1: Create balanced dataset with augmentation
+        # BalancedDataset will oversample/augment undersampled classes
+        # ------------------------------------------------------
         full_train_dataset = BalancedDataset(df, images_path, self.metadata)
 
-        # Debug: Class distribution in balanced dataset
+        # Get label distribution after augmentation
         balanced_labels = [int(lbl) for _, lbl in [(p, l) for p, l, _ in full_train_dataset.data]]
         self.balanced_counts = dict(Counter(balanced_labels))
+
+        # Log class distribution after augmentation
         with open("class_distribution.log", "a") as f:
-            f.write("📊 Class distribution AFTER augmentation:\n")
+            f.write("\n📊 Class distribution AFTER augmentation:\n")
             for cls, count in sorted(self.balanced_counts.items()):
                 f.write(f"  Class {cls}: {count} samples\n")
-        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        metadata_path = os.path.join(root_dir, f"dataset_analysis_{self.dataset_name}.json")
 
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-        metadata["oversampled_classes"] = get_oversampled_classes(
-        self.balanced_counts,
-        detect_factor=self.oversample_factor  # adjust factor if needed
-    )
+        # ------------------------------------------------------
+        # STEP 2: Balanced split for validation
+        # ------------------------------------------------------
+        val_indices = []
+        train_indices = []
 
-        with open(metadata_path, "w") as f:  #save oversampled classes 
-            json.dump(metadata, f, indent=2)
-
-        # Step 2: Stratified split to balance validation set
         labels = np.array(balanced_labels)
-        train_indices, val_indices = train_test_split(
-            np.arange(len(labels)),
-            test_size=0.2,
-            stratify=labels,
-            random_state=42
-        )
+        unique_classes = np.unique(labels)
+        min_class_count = min([np.sum(labels == cls) for cls in unique_classes])
+        val_per_class = int(min_class_count * 0.2)  # 20% per class
+
+        for cls in unique_classes:
+            cls_indices = np.where(labels == cls)[0]
+            val_cls_idx = np.random.choice(cls_indices, size=val_per_class, replace=False)
+            train_cls_idx = np.setdiff1d(cls_indices, val_cls_idx)
+            val_indices.extend(val_cls_idx)
+            train_indices.extend(train_cls_idx)
 
         train_dataset = torch.utils.data.Subset(full_train_dataset, train_indices)
         val_dataset = torch.utils.data.Subset(full_train_dataset, val_indices)
 
-        # Step 3: Create DataLoaders
-        self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+        # ------------------------------------------------------
+        # STEP 3: WeightedRandomSampler for balanced training batches
+        # Gives each sample a weight inversely proportional to its class frequency
+        # ------------------------------------------------------
+
+        # Get the labels only for the training subset
+        train_labels = [balanced_labels[i] for i in train_indices]
+
+        # Count how many samples per class in the training set
+        class_sample_count = np.array([train_labels.count(c) for c in sorted(set(train_labels))])
+
+        # Assign weight per class = inverse frequency
+        weight_per_class = 1.0 / class_sample_count
+
+        # Map each training sample to its weight
+        sample_weights = [weight_per_class[label] for label in train_labels]
+
+        # Create the sampler that will sample *with replacement* according to weights
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(train_dataset),  # one pass over the dataset size
+            replacement=True
+        )
+
+        # Create the training loader using the sampler (no shuffle needed)
+        self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, sampler=sampler)
+
+        # Validation loader does not use a sampler — just plain stratified subset
         self.val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
-        # Step 4: Prepare fixed test set (for final evaluation only)
-        test_transform = get_default_transforms(self.metadata)
+        # ------------------------------------------------------
+        # DEBUG: Log the first batch's class distribution for verification
+        # ------------------------------------------------------
+        first_batch_labels = []
+        for _, labels_batch in self.train_loader:
+            first_batch_labels = labels_batch.cpu().numpy().tolist()
+            break  # only log the first batch
 
+        print(f"[DEBUG] First batch class counts: {Counter(first_batch_labels)}")
+        with open("weighted_sampler_debug.log", "w") as f:
+            f.write(f"First batch classes: {first_batch_labels}\n")
+            f.write(f"Class counts in first batch: {dict(Counter(first_batch_labels))}\n")
+
+        # ------------------------------------------------------
+        # STEP 4: Prepare test set
+        # ------------------------------------------------------
+        test_transform = get_default_transforms(self.metadata)
         if test_mode:
-            # Unlabeled test set
+            # Test set without labels (for competition/test submission)
             self.test_loader = DataLoader(
                 TestImageDataset(test_df, test_images_path, metadata=self.metadata, transform=test_transform),
-                batch_size=self.batch_size, shuffle=False
+                batch_size=self.batch_size,
+                shuffle=False
             )
         else:
-            # Labeled test set (for local evaluation)
+            # Test set with labels (for local evaluation)
             test_data = [
                 (
-                    test_transform(Image.open(os.path.join(test_images_path, row['image_file_name'])).convert(
-                        "RGB" if self.metadata.get("num_channels", 3) == 3 else "L"
-                    )),
+                    test_transform(
+                        Image.open(os.path.join(test_images_path, row['image_file_name']))
+                        .convert("RGB" if self.metadata.get("num_channels", 3) == 3 else "L")
+                    ),
                     int(row['label'])
                 )
                 for _, row in test_df.iterrows()
             ]
             self.test_loader = DataLoader(test_data, batch_size=self.batch_size, shuffle=False)
 
+        # ------------------------------------------------------
+        # FINAL PRINT
+        # ------------------------------------------------------
         print(f"🧪 Training on {len(self.train_loader.dataset)} samples. Validation on {len(self.val_loader.dataset)} samples.")
 
     
@@ -479,8 +512,10 @@ def load_hpo_params(json_path):
         return data["params"]
     return data  # Already flat dict
 
-def objective(trial, dataset_name, architecture_params, test_mode):
+def objective(trial, dataset_name, architecture_params, test_mode, median_count):
     # 1. Restrict optimizer choices based on CV domain knowledge
+
+
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "AdamW"])
 
     # 2. Learning rate ranges tailored for Adam/AdamW
@@ -493,9 +528,8 @@ def objective(trial, dataset_name, architecture_params, test_mode):
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
 
     # 4. Other relevant HPO parameters
-    min_samples = trial.suggest_int("min_samples_per_class", 150, 400)
-    batch_size = trial.suggest_categorical("batch_size", [8,16])
-    oversample_factor = trial.suggest_float("oversample_factor", 1.5, 4.0)
+    min_samples = trial.suggest_int("min_samples_per_class", max(200,median_count), 400)
+    batch_size = trial.suggest_categorical("batch_size", [16,32])
 
 
     print(f"🔎 Trial {trial.number} trying: optimizer={optimizer_name}, lr={lr:.2e}, weight_decay={weight_decay:.1e}, min_samples={min_samples}, batch_size={batch_size}")
@@ -510,8 +544,8 @@ def objective(trial, dataset_name, architecture_params, test_mode):
             epochs=2,
             learning_rate=lr,
             optimizer_name=optimizer_name,
-            test_mode=test_mode,
-            oversample_factor=oversample_factor 
+            test_mode=test_mode
+        
         )
 
         # Inject weight decay into optimizer (requires modifying _init_optimizer)
@@ -526,7 +560,7 @@ def objective(trial, dataset_name, architecture_params, test_mode):
         error_msg = (
         f"\n❌ Trial {trial.number} failed\n"
         f"Parameters: optimizer={optimizer_name}, lr={lr}, "
-        f"weight_decay={weight_decay}, min_samples={min_samples}, batch_size={batch_size}, oversample_factor={oversample_factor}\n"
+        f"weight_decay={weight_decay}, min_samples={min_samples}, batch_size={batch_size}\n"
         f"Error: {e}\n"
         f"Traceback:\n{traceback.format_exc()}\n"
     )
@@ -556,15 +590,21 @@ def run_hpo(dataset_name, architecture_params, test_mode):
     # 🔁 Warm-start Optuna with a strong baseline
     study.enqueue_trial({
         "min_samples_per_class": 200,
-        "batch_size": 16,
+        "batch_size": 32,
         "optimizer": "Adam",
         "lr": 1e-4,
         "weight_decay": 1e-4
     })
+        # Get median from current dataset
+    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", dataset_name))
+    train_csv_path = os.path.join(base_path, "train.csv")
+    class_counts_before = dict(Counter(pd.read_csv(train_csv_path)["label"]))    
+    median_count = int(np.median(list(class_counts_before.values())))
+
 
     # Start the HPO process
-    study.optimize(lambda trial: objective(trial, dataset_name, architecture_params, test_mode), 
-    n_trials=2) #2hours HPO
+    study.optimize(lambda trial: objective(trial, dataset_name, architecture_params, test_mode,median_count), 
+     n_trials=2) #2hours HPO
 
     # ✅ Log the best trial
     print("\n✅ Best trial:")
