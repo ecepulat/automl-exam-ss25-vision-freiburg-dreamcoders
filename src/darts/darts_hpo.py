@@ -113,7 +113,7 @@ def run_darts_hpo(dataset_name, best_architecture_params, metadata_path=None):
             grad_clip=5,
             report_freq=50,
             gpu=0,
-            epochs=5 # Was 20 before
+            epochs=20 # Tried 5 for debug
         )
 
         torch.cuda.set_device(args.gpu)
@@ -144,7 +144,7 @@ def run_darts_hpo(dataset_name, best_architecture_params, metadata_path=None):
             print(f"Epoch {epoch+1}/{args.epochs} | Val Acc: {val_acc:.2f}")
         return best_val_acc
 
-    n_trials = 5
+    n_trials = 30 # tried 5 for debug
     pbar = tqdm(total=n_trials)
 
     def callback(study, trial):

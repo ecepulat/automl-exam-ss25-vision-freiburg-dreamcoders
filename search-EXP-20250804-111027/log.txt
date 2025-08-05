@@ -1,8 +1,0 @@
-2025-08-04 11:10:27,889 Running DARTS search on 'fashion'
-2025-08-04 11:10:27,889 args = namespace(data='/workspace/automl-exam-ss25-vision-freiburg-dreamcoders/data', batch_size=24, learning_rate=0.025, learning_rate_min=0.001, momentum=0.9, weight_decay=0.0003, report_freq=50, gpu=0, epochs=5, init_channels=8, layers=5, model_path='saved_models', cutout=False, cutout_length=16, drop_path_prob=0.2, save='search-EXP-20250804-111027', seed=0, grad_clip=5, train_portion=0.3, unrolled=False, arch_learning_rate=0.0003, arch_weight_decay=0.001, arch='DARTS', auxiliary=False, auxiliary_weight=0.4)
-2025-08-04 11:10:28,186 param size = 0.394210MB
-2025-08-04 11:10:29,110 epoch 0 lr 2.270820e-02
-2025-08-04 11:10:29,126 genotype = Genotype(normal=[('dil_conv_3x3', 0), ('dil_conv_5x5', 1), ('max_pool_3x3', 0), ('sep_conv_3x3', 1), ('dil_conv_3x3', 3), ('dil_conv_3x3', 1), ('sep_conv_3x3', 4), ('sep_conv_5x5', 0)], normal_concat=range(2, 6), reduce=[('sep_conv_5x5', 1), ('dil_conv_3x3', 0), ('max_pool_3x3', 1), ('sep_conv_5x5', 0), ('sep_conv_3x3', 1), ('avg_pool_3x3', 0), ('dil_conv_3x3', 1), ('sep_conv_5x5', 0)], reduce_concat=range(2, 6))
-2025-08-04 11:10:31,102 train 000 2.274725e+00 16.666666 66.666664
-2025-08-04 11:10:45,113 train 050 1.247650e+00 54.084966 93.709148
-2025-08-04 11:10:59,225 train 100 1.024768e+00 62.788777 96.080856
