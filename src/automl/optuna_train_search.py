@@ -169,9 +169,9 @@ def objective(trial, dataset_name="flowers"):
         train_size = len(balanced_dataset) - val_size
         train_dataset, val_dataset = random_split(balanced_dataset, [train_size, val_size])
         #Step 3: Wrap in DataLoaders
-        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+        train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
         #We dont shuffle the validation set because We want deterministic, reproducible evaluation.
-        val_loader = DataLoader(val_dataset, batch_size=32)
+        val_loader = DataLoader(val_dataset, batch_size=16)
 
         # Model initialization
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

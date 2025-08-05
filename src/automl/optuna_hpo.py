@@ -24,13 +24,13 @@ from collections import Counter
 from sklearn.metrics import classification_report
 from utils import get_default_transforms
 import optuna
-
-
-
+from data_analyze import get_oversampled_classes
+import traceback
+from random import sample
 import json
 
 class QuickTrain:
-    def __init__(self, dataset_name, batch_size=32, epochs=2, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False):
+    def __init__(self, dataset_name, batch_size=32, epochs=2, model_name="custom", config_path=None, min_samples_per_class=150, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False, oversample_factor=2.0):
         self.dataset_name = dataset_name
         self.architecture_params = architecture_params  # Best Arch found in NAS
         self.batch_size = batch_size
@@ -41,6 +41,7 @@ class QuickTrain:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.min_samples_per_class = min_samples_per_class
         self.LOG_FILE = "hpo_all_trials.log"
+        self.oversample_factor = oversample_factor 
 
         with open(self.LOG_FILE, "a") as f:
             f.write(f"📝 Training Log for {self.model_name} on {self.dataset_name}\n\n")
@@ -80,37 +81,78 @@ class QuickTrain:
 
 
     
-    def _prepare_data(self, test_mode =False):
+    def _prepare_data(self, test_mode=False):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", self.dataset_name))
         
-        # Load CSVs
+        # Step 0: Load CSV
         df = pd.read_csv(os.path.join(base_path, "train.csv"))
         test_df = pd.read_csv(os.path.join(base_path, "test.csv"))
         images_path = os.path.join(base_path, "images_train")
         test_images_path = os.path.join(base_path, "images_test")
 
-        # Step 1: Balance the training data
-        full_train_dataset = BalancedDataset(df, images_path, self.metadata)
-        balanced_df = full_train_dataset.df  # This is already balanced
+        # Step 0.5: Detect oversampled classes in the *original* dataset
+        class_counts_before = dict(Counter(df["label"]))
+        oversampled_info = get_oversampled_classes(class_counts_before, detect_factor=self.oversample_factor)
+        # BEFORE downsampling
+        with open("class_distribution.log", "a") as f:
+            f.write("\n📊 BEFORE oversample removal:\n")
+            for cls, count in sorted(class_counts_before.items()):
+                f.write(f"  Class {cls}: {count} samples\n")
+        # If oversampled classes exist, drop a fraction
+        for cls, info in oversampled_info.items():
+            cls = int(cls)
+            cls_indices = df[df["label"] == cls].index.tolist()
+            n_remove = int(info["remove_fraction"] * info["current_count"])
+            drop_indices = np.random.choice(cls_indices, size=n_remove, replace=False)
+            df = df.drop(drop_indices)
 
-        # Step 2: Train/Validation split
-        train_df, val_df = train_test_split(
-            balanced_df,
+        # AFTER downsampling
+        with open("class_distribution.log", "a") as f:
+            f.write("\n📊 AFTER oversample removal:\n")
+            for cls, count in sorted(dict(Counter(df['label'])).items()):
+                f.write(f"  Class {cls}: {count} samples\n")
+
+        # Step 1: Now create balanced dataset from the reduced df
+        full_train_dataset = BalancedDataset(df, images_path, self.metadata)
+
+        # Debug: Class distribution in balanced dataset
+        balanced_labels = [int(lbl) for _, lbl in [(p, l) for p, l, _ in full_train_dataset.data]]
+        self.balanced_counts = dict(Counter(balanced_labels))
+        with open("class_distribution.log", "a") as f:
+            f.write("📊 Class distribution AFTER augmentation:\n")
+            for cls, count in sorted(self.balanced_counts.items()):
+                f.write(f"  Class {cls}: {count} samples\n")
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        metadata_path = os.path.join(root_dir, f"dataset_analysis_{self.dataset_name}.json")
+
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+        metadata["oversampled_classes"] = get_oversampled_classes(
+        self.balanced_counts,
+        detect_factor=self.oversample_factor  # adjust factor if needed
+    )
+
+        with open(metadata_path, "w") as f:  #save oversampled classes 
+            json.dump(metadata, f, indent=2)
+
+        # Step 2: Stratified split to balance validation set
+        labels = np.array(balanced_labels)
+        train_indices, val_indices = train_test_split(
+            np.arange(len(labels)),
             test_size=0.2,
-            stratify=balanced_df["label"],
+            stratify=labels,
             random_state=42
         )
 
-        # Step 3: Create BalancedDataset objects
-        train_dataset = BalancedDataset(train_df, images_path, self.metadata)
-        val_dataset = BalancedDataset(val_df, images_path, self.metadata)
+        train_dataset = torch.utils.data.Subset(full_train_dataset, train_indices)
+        val_dataset = torch.utils.data.Subset(full_train_dataset, val_indices)
 
+        # Step 3: Create DataLoaders
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
         # Step 4: Prepare fixed test set (for final evaluation only)
         test_transform = get_default_transforms(self.metadata)
-
 
         if test_mode:
             # Unlabeled test set
@@ -131,10 +173,9 @@ class QuickTrain:
             ]
             self.test_loader = DataLoader(test_data, batch_size=self.batch_size, shuffle=False)
 
-
-
-        
         print(f"🧪 Training on {len(self.train_loader.dataset)} samples. Validation on {len(self.val_loader.dataset)} samples.")
+
+    
     def evaluate_val(self):
         print("🧪 Evaluating on validation set...")
         self.model.eval()
@@ -189,7 +230,14 @@ class QuickTrain:
             input_resolution=tuple(self.metadata["image_resolution"])
         ).to(self.device)
 
-        self.criterion = nn.CrossEntropyLoss()
+        # Get class weights from balanced_counts
+        total_samples = sum(self.balanced_counts.values())
+        class_weights = torch.tensor(
+            [total_samples / self.balanced_counts[cls] for cls in sorted(self.balanced_counts.keys())],
+            dtype=torch.float
+        ).to(self.device)
+
+        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
 
     def evaluate_test(self):
         print("🧪 Evaluating on test set...")
@@ -431,7 +479,7 @@ def load_hpo_params(json_path):
         return data["params"]
     return data  # Already flat dict
 
-def objective(trial, dataset_name, architecture_params):
+def objective(trial, dataset_name, architecture_params, test_mode):
     # 1. Restrict optimizer choices based on CV domain knowledge
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "AdamW"])
 
@@ -446,8 +494,8 @@ def objective(trial, dataset_name, architecture_params):
 
     # 4. Other relevant HPO parameters
     min_samples = trial.suggest_int("min_samples_per_class", 150, 400)
-    batch_size = trial.suggest_categorical("batch_size", [16, 32])
-
+    batch_size = trial.suggest_categorical("batch_size", [8,16])
+    oversample_factor = trial.suggest_float("oversample_factor", 1.5, 4.0)
 
 
     print(f"🔎 Trial {trial.number} trying: optimizer={optimizer_name}, lr={lr:.2e}, weight_decay={weight_decay:.1e}, min_samples={min_samples}, batch_size={batch_size}")
@@ -461,7 +509,9 @@ def objective(trial, dataset_name, architecture_params):
             batch_size=batch_size,
             epochs=2,
             learning_rate=lr,
-            optimizer_name=optimizer_name
+            optimizer_name=optimizer_name,
+            test_mode=test_mode,
+            oversample_factor=oversample_factor 
         )
 
         # Inject weight decay into optimizer (requires modifying _init_optimizer)
@@ -472,11 +522,24 @@ def objective(trial, dataset_name, architecture_params):
         print(f"✅ Trial {trial.number} finished with accuracy: {acc:.4f}")
         return acc
     except Exception as e:
+        log_path = "hpo_trial_errors.log"
+        error_msg = (
+        f"\n❌ Trial {trial.number} failed\n"
+        f"Parameters: optimizer={optimizer_name}, lr={lr}, "
+        f"weight_decay={weight_decay}, min_samples={min_samples}, batch_size={batch_size}, oversample_factor={oversample_factor}\n"
+        f"Error: {e}\n"
+        f"Traceback:\n{traceback.format_exc()}\n"
+    )
+        print(error_msg)  # still show in console
+
+        # Append to log file
+        with open(log_path, "a") as log_file:
+            log_file.write(error_msg)
         print(f"❌ Trial {trial.number} failed with exception: {e}")
         return 0.0
 
 
-def run_hpo(dataset_name, architecture_params):
+def run_hpo(dataset_name, architecture_params, test_mode):
     print("HPO OPTUNA")
     # compare_configs()
     # 🧪 HPO using Optuna
@@ -493,14 +556,14 @@ def run_hpo(dataset_name, architecture_params):
     # 🔁 Warm-start Optuna with a strong baseline
     study.enqueue_trial({
         "min_samples_per_class": 200,
-        "batch_size": 32,
+        "batch_size": 16,
         "optimizer": "Adam",
         "lr": 1e-4,
         "weight_decay": 1e-4
     })
 
     # Start the HPO process
-    study.optimize(lambda trial: objective(trial, dataset_name, architecture_params), 
+    study.optimize(lambda trial: objective(trial, dataset_name, architecture_params, test_mode), 
     n_trials=2) #2hours HPO
 
     # ✅ Log the best trial
@@ -531,14 +594,9 @@ def run_hpo(dataset_name, architecture_params):
     plt.clf()
 
     # Parameter importances
-    vis.plot_param_importances(study)
-    plt.gcf().savefig(f"plots/{dataset_name}_optuna_importance.png", dpi=300, bbox_inches='tight')
-    plt.clf()
-
-   
-
-
-
+    #vis.plot_param_importances(study)
+    #plt.gcf().savefig(f"plots/{dataset_name}_optuna_importance.png", dpi=300, bbox_inches='tight')
+    #plt.clf()
 
     print("✅ HPO complete and visualizations saved.")
 

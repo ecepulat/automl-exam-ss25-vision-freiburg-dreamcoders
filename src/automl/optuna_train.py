@@ -18,14 +18,14 @@ def final_train(dataset_name, best_architecture_params, best_hpo_params, test_mo
         learning_rate=best_hpo_params["lr"],
         optimizer_name=best_hpo_params["optimizer"],
         weight_decay=best_hpo_params["weight_decay"],
-        track_metrics=True #enable final log 
-
+        test_mode=test_mode,
+        oversample_factor=best_hpo_params["oversample_factor"] 
 
     )
 
     final_trainer.full_train()
     if not test_mode:
-            final_trainer.evaluate_test()  # ✅ safe only in non-test mode
+        final_trainer.evaluate_test()  # ✅ safe only in non-test mode
 
     return final_trainer
 

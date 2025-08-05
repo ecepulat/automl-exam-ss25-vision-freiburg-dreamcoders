@@ -129,7 +129,11 @@ def calculate_median_margin(class_counts):
     """
     # If class_counts contains dicts, extract 'current_count'
     sample_values = list(class_counts.values())
-  
+    with open("class_distribution.log", "w") as f:
+        f.write("📊 Class distribution BEFORE augmentation:\n")
+        for cls, count in sorted(class_counts.items()):
+            f.write(f"  Class {cls}: {count} samples\n")
+    
     if isinstance(sample_values[0], dict):
         counts = np.array([v["current_count"] for v in sample_values])
     else:
@@ -157,7 +161,26 @@ def get_undersampled_classes(class_counts, min_samples_per_class):
             }
 
     return undersampled
+def get_oversampled_classes(class_counts, detect_factor=2.0, limit_factor=3.0):
+    """
+    Detect classes with sample counts significantly above others.
 
+    detect_factor: threshold multiplier over the median to *flag* a class as oversampled.
+    limit_factor:  maximum multiplier over the median to *allow* after undersampling.
+    """
+    counts = list(class_counts.values())
+    median_count = np.median(counts)
+
+    oversampled = {}
+    for cls, count in class_counts.items():
+        if count > median_count * detect_factor:
+            target = int(median_count * limit_factor)
+            oversampled[cls] = {
+                "current_count": count,
+                "target_count": min(count, target),
+                "remove_fraction": round(1 - min(count, target) / count, 3)
+            }
+    return oversampled
 
 def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_per_class: int = 150):
     print("Analyze dataset started")

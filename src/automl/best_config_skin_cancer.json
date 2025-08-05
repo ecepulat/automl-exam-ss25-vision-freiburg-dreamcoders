@@ -69,7 +69,7 @@
                 "kernel": 7,
                 "use_se": false,
                 "use_residual": true,
-                "downsample": false,
+                "downsample": true,
                 "expansion": 6,
                 "use_depthwise": false
             },
@@ -78,7 +78,7 @@
                 "kernel": 7,
                 "use_se": true,
                 "use_residual": false,
-                "downsample": true,
+                "downsample": false,
                 "expansion": 6,
                 "use_depthwise": false
             },
@@ -158,5 +158,5 @@
         "filters8": 192,
         "filters9": 192
     },
-    "value": 0.3409395973154362
+    "value": 0.34496644295302015
 }

@@ -1,7 +1,7 @@
 [
     {
         "trial_number": 0,
-        "value": 0.3409395973154362,
+        "value": 0.34496644295302015,
         "parameters": {
             "num_layers": 11,
             "useresidual0": true,
@@ -51,8 +51,8 @@
         },
         "best_so_far": {
             "trial": 0,
-            "value": 0.3409395973154362
+            "value": 0.34496644295302015
         },
-        "timestamp": "2025-08-05 09:23:00"
+        "timestamp": "2025-08-05 15:28:07"
     }
 ]

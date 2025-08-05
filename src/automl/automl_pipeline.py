@@ -36,6 +36,11 @@ def main():
     )
     parser.add_argument("--test", action="store_true", help="If set, treat test set as unlabeled")
     
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+    data_dir = os.path.join(project_root, "data", "exam_dataset")
+    os.makedirs(data_dir, exist_ok=True)
+
     args = parser.parse_args()
     dataset_name = args.datasetname
     test_flag = args.test
@@ -52,6 +57,7 @@ def main():
 
     print(f"[INFO] Resolution for '{dataset_name}': {width}x{height} → {resolution_product}")
 
+
     if resolution_product > 250 * 250:
         print("[DECISION] Using Optuna + Hyperband (multi-fidelity HPO)")
         start = time.time()
@@ -59,7 +65,7 @@ def main():
         architecture_time = time.time() - start
       
         start = time.time()
-        best_param_hpo = run_hpo(dataset_name, best_architecture_params)
+        best_param_hpo = run_hpo(dataset_name, best_architecture_params, test_flag)
 
         hpo_time = time.time() - start
 
@@ -71,7 +77,6 @@ def main():
             best_hpo_params=best_param_hpo, test_mode = test_flag)
         final_train_time = time.time() - start
 
-        os.makedirs(data_dir, exist_ok=True)
     
         if test_flag:
             trainer.generate_test_predictions(
@@ -91,7 +96,7 @@ def main():
 
         # HPO
         start = time.time()
-        best_param_hpo = run_darts_hpo(dataset_name, best_architecture_params, metadata_path)
+        best_param_hpo = run_darts_hpo(dataset_name, best_architecture_params, metadata_path, test_flag)
         hpo_time = time.time() - start
         print(f"[DEBUG] Got HPO params: {best_param_hpo}")
         print(f"[TIMING] HPO took {hpo_time:.2f} seconds")
@@ -109,8 +114,6 @@ def main():
 
 
     total_time = time.time() - total_start
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    data_dir = os.path.join(project_root, "data", "exam_dataset")
 
 
 
