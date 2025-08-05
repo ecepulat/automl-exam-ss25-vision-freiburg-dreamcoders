@@ -2,222 +2,247 @@ import os
 import sys
 import time
 import glob
+import json
+import logging
 import numpy as np
 import torch
-import utils
-import logging
-import argparse
 import torch.nn as nn
-import torch.utils
-import torch.nn.functional as F
-import torchvision.datasets as dset
+import torch.utils.data
 import torch.backends.cudnn as cudnn
 from tqdm import tqdm
-from torch.autograd import Variable
-from model_search import Network
-from architect import Architect
-import torch.multiprocessing
+from pathlib import Path
 
-torch.cuda.empty_cache()
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from feed_data import BalancedDataset
-from data_analyze import analyze_dataset
+from .model_search import Network # Use a relative import to locate the files
+from .architect import Architect
+from automl.feed_data import BalancedDataset
+from types import SimpleNamespace
 import pandas as pd
-import json
+from . import utils
 
-FASHION_CLASSES = 10
 
-def main():
-  if not torch.cuda.is_available():
-    logging.info('no gpu device available')
-    sys.exit(1)
+def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, args):
+    objs = utils.AvgrageMeter()
+    top1 = utils.AvgrageMeter()
+    top5 = utils.AvgrageMeter()
 
-  torch.cuda.set_device(0)
+    valid_iter = iter(valid_queue)
 
-  np.random.seed(args.seed)
-  torch.cuda.set_device(args.gpu)
-  cudnn.benchmark = True
-  torch.manual_seed(args.seed)
-  cudnn.enabled = True
-  torch.cuda.manual_seed(args.seed)
-  logging.info('gpu device = %d' % args.gpu)
-  logging.info("args = %s", args)
+    for step, (input, target) in enumerate(train_queue):
+        model.train()
+        n = input.size(0)
 
-  criterion = nn.CrossEntropyLoss().cuda()
-  model = Network(args.init_channels, FASHION_CLASSES, args.layers, criterion).cuda()
-  logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
+        input = input.cuda(non_blocking=True)
+        target = target.cuda(non_blocking=True)
 
-  optimizer = torch.optim.SGD(
-      model.parameters(),
-      args.learning_rate,
-      momentum=args.momentum,
-      weight_decay=args.weight_decay)
+        try:
+            input_search, target_search = next(valid_iter)
+        except StopIteration:
+            valid_iter = iter(valid_queue)
+            input_search, target_search = next(valid_iter)
 
-  train_transform, valid_transform = utils._data_transforms_fashion(args)
+        input_search = input_search.cuda(non_blocking=True)
+        target_search = target_search.cuda(non_blocking=True)
 
-  dataset_name = "fashion"
-  analyze_dataset(dataset_name)
+        architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
 
-  metadata_path = os.path.join(args.data, dataset_name, f"dataset_analysis_{dataset_name}.json")
-  if not os.path.exists(metadata_path):
-      metadata_path = f"dataset_analysis_{dataset_name}.json"
+        optimizer.zero_grad()
+        logits = model(input)
+        loss = criterion(logits, target)
 
-  with open(metadata_path, "r") as f:
-    metadata = json.load(f)
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+        optimizer.step()
 
-  df = pd.read_csv(os.path.join(args.data, dataset_name, "train.csv"))
-  images_path = os.path.join(args.data, dataset_name, "images_train")
-  train_data = BalancedDataset(df, images_path, metadata)
+        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+        objs.update(loss.item(), n)
+        top1.update(prec1.item(), n)
+        top5.update(prec5.item(), n)
 
-  num_train = len(train_data)
-  indices = list(range(num_train))
-  split = int(np.floor(args.train_portion * num_train))
+        if step % args.report_freq == 0:
+            logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
 
-  train_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
-      pin_memory=True, num_workers=6)
+    return top1.avg, objs.avg
 
-  valid_queue = torch.utils.data.DataLoader(
-      train_data, batch_size=args.batch_size,
-      sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
-      pin_memory=True, num_workers=6)
+def infer(valid_queue, model, criterion, args):
+    objs = utils.AvgrageMeter()
+    top1 = utils.AvgrageMeter()
+    top5 = utils.AvgrageMeter()
+    model.eval()
 
-  scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    with torch.no_grad():
+        for step, (input, target) in enumerate(valid_queue):
+            input = input.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
+
+            logits = model(input)
+            loss = criterion(logits, target)
+
+            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+            n = input.size(0)
+            objs.update(loss.item(), n)
+            top1.update(prec1.item(), n)
+            top5.update(prec5.item(), n)
+
+            if step % args.report_freq == 0:
+                logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+
+    return top1.avg, objs.avg
+
+def run_darts_arch_search(args, dataset_name):
+    if not torch.cuda.is_available():
+        logging.error('No GPU device available')
+        sys.exit(1)
+
+    torch.cuda.set_device(args.gpu)
+    np.random.seed(args.seed)
+    cudnn.benchmark = True
+    torch.manual_seed(args.seed)
+    cudnn.enabled = True
+    torch.cuda.manual_seed(args.seed)
+
+    logging.info(f"Running DARTS search on '{dataset_name}'")
+    logging.info("args = %s", args)
+
+    # train_transform, valid_transform = utils._data_transforms(dataset_name, args)
+    project_root = Path(__file__).resolve().parents[2]
+    metadata_path = project_root / f"dataset_analysis_{dataset_name}.json"
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+
+    criterion = nn.CrossEntropyLoss().cuda()
+    input_channels = 1 if metadata.get("is_grayscale", False) else 3
+    num_classes = metadata["num_classes"]
+    model = Network(args.init_channels, num_classes, args.layers, criterion, input_channels=input_channels).cuda()
+
+    logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
+
+    # Define the optimizer AFTER model is created
+    optimizer = torch.optim.SGD(model.parameters(), args.learning_rate,
+                            momentum=args.momentum, weight_decay=args.weight_decay)
+
+    # Use metadata-defined resolution
+    resize_to = metadata.get("resolution", 32)
+
+    # Use the general transform from utils
+    train_transform = utils.get_dynamic_transform(metadata, resize_to=resize_to)
+
+    # Optionally add Cutout for small images
+    if args.cutout and resize_to <= 32:
+        train_transform.transforms.append(utils.Cutout(args.cutout_length))
+
+    valid_transform = utils.get_dynamic_transform(metadata, resize_to=resize_to)
+
+    df = pd.read_csv(os.path.join(args.data, dataset_name, "train.csv"))
+    images_path = os.path.join(args.data, dataset_name, "images_train")
+    train_data = BalancedDataset(df, images_path, metadata)
+
+    num_train = len(train_data)
+    indices = list(range(num_train))
+    split = int(np.floor(args.train_portion * num_train))
+
+    train_queue = torch.utils.data.DataLoader(
+        train_data, batch_size=args.batch_size,
+        sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[:split]),
+        pin_memory=True, num_workers=6)
+
+    valid_queue = torch.utils.data.DataLoader(
+        train_data, batch_size=args.batch_size,
+        sampler=torch.utils.data.sampler.SubsetRandomSampler(indices[split:num_train]),
+        pin_memory=True, num_workers=6)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
 
-  architect = Architect(model, args)
+    architect = Architect(model, args)
 
-  for epoch in tqdm(range(args.epochs), desc="Epochs"):
-    scheduler.step()
-    lr = scheduler.get_last_lr()[0]
-    logging.info('epoch %d lr %e', epoch, lr)
-    print(f"Epoch {epoch+1}/{args.epochs} | Learning Rate: {lr:.6f}")
+    best_val_acc = 0
+    best_genotype = None
 
-    genotype = model.genotype()
-    logging.info('genotype = %s', genotype)
+    for epoch in tqdm(range(args.epochs), desc="DARTS Search Epochs"):
+        scheduler.step()
+        lr = scheduler.get_last_lr()[0]
+        logging.info('epoch %d lr %e', epoch, lr)
 
-    train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr)
-    logging.info('train_acc %f', train_acc)
-    print(f"Training   - Loss: {train_obj:.4f}, Accuracy: {train_acc:.2f}%")
-    valid_acc, valid_obj = infer(valid_queue, model, criterion)
-    logging.info('valid_acc %f', valid_acc)
-    print(f"Validation - Loss: {valid_obj:.4f}, Accuracy: {valid_acc:.2f}%")
+        genotype = model.genotype()
+        logging.info('genotype = %s', genotype)
 
-    utils.save(model, os.path.join(args.save, 'weights.pt'))
+        train_acc, train_obj = train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, args)
+        valid_acc, valid_obj = infer(valid_queue, model, criterion, args)
 
-def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr):
-  objs = utils.AvgrageMeter()
-  top1 = utils.AvgrageMeter()
-  top5 = utils.AvgrageMeter()
+        logging.info('train_acc %f', train_acc)
+        logging.info('valid_acc %f', valid_acc)
 
-  valid_iter = iter(valid_queue)
+        if valid_acc > best_val_acc:
+            best_val_acc = valid_acc
+            best_genotype = model.genotype()
 
-  for step, (input, target) in enumerate(train_queue):
-    model.train()
-    n = input.size(0)
+        utils.save(model, os.path.join(args.save, 'weights.pt'))
 
-    input = input.cuda(non_blocking=True)
-    target = target.cuda(non_blocking=True)
+    return best_val_acc, best_genotype
 
-    try:
-      input_search, target_search = next(valid_iter)
-    except StopIteration:
-      valid_iter = iter(valid_queue)
-      input_search, target_search = next(valid_iter)
+def darts_arch_search(dataset_name: str):
+    project_root = Path(__file__).resolve().parents[2]
+    data = str(project_root / "data")
 
-    input_search = input_search.cuda(non_blocking=True)
-    target_search = target_search.cuda(non_blocking=True)
+    args = SimpleNamespace(
+        data=os.path.join(os.getcwd(), "data"),
+        batch_size=24,
+        learning_rate=0.025,
+        learning_rate_min=0.001,
+        momentum=0.9,
+        weight_decay=3e-4,
+        report_freq=50,
+        gpu=0,
+        epochs=15, #Tried 5 for debugging
+        init_channels=8,
+        layers=5,
+        model_path='saved_models',
+        cutout=False,
+        cutout_length=16,
+        drop_path_prob=0.2,
+        save='EXP',
+        seed=0,
+        grad_clip=5,
+        train_portion=0.3,
+        unrolled=False,
+        arch_learning_rate=3e-4,
+        arch_weight_decay=1e-3,
+        arch='DARTS',
+        auxiliary=False,
+        auxiliary_weight=0.4
+    )
 
-    architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=args.unrolled)
+    args.save = f'search-{args.save}-{time.strftime("%Y%m%d-%H%M%S")}'
+    utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
 
-    optimizer.zero_grad()
-    logits = model(input)
-    loss = criterion(logits, target)
+    log_format = '%(asctime)s %(message)s'
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+        format=log_format, datefmt='%m/%d %I:%M:%S %p')
+    fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
+    fh.setFormatter(logging.Formatter(log_format))
+    logging.getLogger().addHandler(fh)
 
-    loss.backward()
-    nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
-    optimizer.step()
+    best_val_acc, best_genotype = run_darts_arch_search(args, dataset_name)
 
-    prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-    objs.update(loss.item(), n)
-    top1.update(prec1.item(), n)
-    top5.update(prec5.item(), n)
+    genotype_dict = {
+    "normal": best_genotype.normal,
+    "normal_concat": list(best_genotype.normal_concat),
+    "reduce": best_genotype.reduce,
+    "reduce_concat": list(best_genotype.reduce_concat)
+    }
 
-    if step % args.report_freq == 0:
-      logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+    print(f"\n🎯 Best validation accuracy: {best_val_acc:.2f}%")
+    print("Best genotype (DARTS):")
+    print(json.dumps(genotype_dict, indent=2))
 
-  return top1.avg, objs.avg
+    genotype_path = os.path.join(args.save, f"best_genotype_{dataset_name}.json")
+    with open(genotype_path, "w") as f:
+        json.dump({
+            "dataset": dataset_name,
+            "genotype": genotype_dict,
+            "val_accuracy": best_val_acc,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }, f, indent=2)
 
-def infer(valid_queue, model, criterion):
-  objs = utils.AvgrageMeter()
-  top1 = utils.AvgrageMeter()
-  top5 = utils.AvgrageMeter()
-  model.eval()
-
-  with torch.no_grad():
-    for step, (input, target) in enumerate(valid_queue):
-      input = input.cuda(non_blocking=True)
-      target = target.cuda(non_blocking=True)
-
-      logits = model(input)
-      loss = criterion(logits, target)
-
-      prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-      n = input.size(0)
-      objs.update(loss.item(), n)
-      top1.update(prec1.item(), n)
-      top5.update(prec5.item(), n)
-
-      if step % args.report_freq == 0:
-        logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
-
-  return top1.avg, objs.avg
-
-
-if __name__ == '__main__':
-  import torch.multiprocessing
-  torch.multiprocessing.set_start_method('spawn', force=True)
-
-  from types import SimpleNamespace
-  args = SimpleNamespace(
-      data='C:/Users/ecepu/Documents/AutoML/data',
-      batch_size=24,
-      learning_rate=0.025,
-      learning_rate_min=0.001,
-      momentum=0.9,
-      weight_decay=3e-4,
-      report_freq=50,
-      gpu=0,
-      epochs=5,
-      init_channels=8,
-      layers=5,
-      model_path='saved_models',
-      cutout=False,
-      cutout_length=16,
-      drop_path_prob=0.2,
-      save='EXP',
-      seed=0,
-      grad_clip=5,
-      train_portion=0.3,
-      unrolled=False,
-      arch_learning_rate=3e-4,
-      arch_weight_decay=1e-3,
-      arch='DARTS',
-      auxiliary=False,
-      auxiliary_weight=0.4
-  )
-
-  args.save = 'search-{}-{}'.format(args.save, time.strftime("%Y%m%d-%H%M%S"))
-  utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
-
-  log_format = '%(asctime)s %(message)s'
-  logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-      format=log_format, datefmt='%m/%d %I:%M:%S %p')
-  fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
-  fh.setFormatter(logging.Formatter(log_format))
-  logging.getLogger().addHandler(fh)
-
-  main()
+    logging.info(f"[✓] Final genotype saved to {genotype_path}")
+    return genotype_dict

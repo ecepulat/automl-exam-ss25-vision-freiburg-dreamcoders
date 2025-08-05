@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from operations import *
+from .operations import *
 from torch.autograd import Variable
-from utils import drop_path
+from .utils import drop_path
 
 
 class Cell(nn.Module):
@@ -114,6 +114,7 @@ class NetworkCIFAR(nn.Module):
     super(NetworkCIFAR, self).__init__()
     self._layers = layers
     self._auxiliary = auxiliary
+    self.drop_path_prob = 0.0
 
     stem_multiplier = 3
     C_curr = stem_multiplier*C

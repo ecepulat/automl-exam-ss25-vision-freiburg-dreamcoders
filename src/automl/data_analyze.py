@@ -189,6 +189,8 @@ def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_pe
     with Image.open(first_img_path) as img:
         width, height = img.size
         num_channels = len(img.getbands())
+        is_grayscale = img.mode == "L"
+
 
     metadata = {
         "dataset": dataset_name,
@@ -196,6 +198,8 @@ def analyze_dataset(dataset_name: str, save_to_file: bool = True, min_samples_pe
         "num_classes": num_classes,
         "image_resolution": (width, height),
         "num_channels": num_channels,
+        "is_grayscale": is_grayscale,
+
         "class_counts": class_counts,
         "class_distribution": {
             str(k): round(v, 4)

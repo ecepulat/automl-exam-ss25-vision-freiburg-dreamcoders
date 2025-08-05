@@ -76,11 +76,22 @@ class BalancedDataset(Dataset):
         Applies random augmentation only to duplicated samples.
         """
         img_path, label, duplicated = self.data[idx]
-        image = Image.open(img_path).convert("RGB")
+        # The below did not work for fashion because grayscale images have 1 chanel while rgb has 3
+        # image = Image.open(img_path).convert("RGB")
+
+        image = Image.open(img_path)
+        if self.metadata.get("is_grayscale", False):
+            image = image.convert("L")
+        else:
+            image = image.convert("RGB")
 
         if duplicated:
             image = self.trivial_transform(image)
         else:
             image = self.default_transform(image)
+        
+        # DEBUG: print shape before returning
+        if idx == 0:
+            print(f"[DEBUG] Shape of image[{idx}]: {image.shape}")  # should be [1, 28, 28] for fashion
 
         return image, int(label)
