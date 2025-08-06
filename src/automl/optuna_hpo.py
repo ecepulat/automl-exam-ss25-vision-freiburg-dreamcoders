@@ -25,6 +25,7 @@ from sklearn.metrics import classification_report
 from utils import get_default_transforms
 import optuna
 import traceback
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 
 from torch.utils.data import WeightedRandomSampler
@@ -224,7 +225,7 @@ class QuickTrain:
             dtype=torch.float
         ).to(self.device)
 
-        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
+        self.criterion = nn.CrossEntropyLoss()
 
     def evaluate_test(self):
         print("🧪 Evaluating on test set...")
@@ -294,12 +295,16 @@ class QuickTrain:
         patience_counter = 0
         early_stopping_patience = 5
         early_stopping_min_delta = 0.001
+        # ✅ Scheduler using HPO-found LR
+        scheduler = CosineAnnealingWarmRestarts(self.optimizer, T_0=5, T_mult=1)
+
 
         for epoch in range(self.epochs):
             self.model.train()
             total_loss, total_correct = 0, 0
 
             for images, labels in tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.epochs}"):
+
                 images, labels = images.to(self.device), labels.to(self.device)
                 outputs = self.model(images)
                 loss = self.criterion(outputs, labels)
@@ -310,7 +315,10 @@ class QuickTrain:
 
                 total_loss += loss.item() * images.size(0)
                 total_correct += (outputs.argmax(1) == labels).sum().item()
+  
+   
 
+    
             acc = total_correct / len(self.train_loader.dataset)
             avg_loss = total_loss / len(self.train_loader.dataset)
             train_acc_list.append(acc)
@@ -318,6 +326,11 @@ class QuickTrain:
 
             val_acc = self.evaluate_val()
             val_acc_list.append(val_acc)
+            scheduler.step()# ✅ step once per epoch
+            current_lr = self.optimizer.param_groups[0]['lr']
+
+            with open(self.LOG_FILE, "a") as f:
+                f.write(f"📉 Current LR: {current_lr:.6f}\n")
 
             print(f"📦 Epoch {epoch+1}: Loss={avg_loss:.4f}, Accuracy={acc:.4f}")
             with open(self.LOG_FILE, "a") as f:
@@ -496,7 +509,7 @@ def objective(trial, dataset_name, architecture_params, test_mode, median_count)
             architecture_params=architecture_params,
             min_samples_per_class=min_samples,
             batch_size=batch_size,
-            epochs=2,
+            epochs=5,
             learning_rate=lr,
             optimizer_name=optimizer_name,
             test_mode=test_mode
@@ -570,7 +583,7 @@ def run_hpo(dataset_name, architecture_params, test_mode):
 
     # Start the HPO process
     study.optimize(lambda trial: objective(trial, dataset_name, architecture_params, test_mode,median_count), 
-     timeout=300) #2hours HPO
+     timeout=7200) #2hours HPO
 
     # ✅ Log the best trial
     print("\n✅ Best trial:")

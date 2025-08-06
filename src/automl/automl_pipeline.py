@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from data_analyze import analyze_dataset
 from optuna_hpo import run_hpo
-from optuna_train_search import optuna_arch_search
+from optuna_nas import optuna_arch_search
 from optuna_train import final_train
 # Add src/ to sys.path to resolve the darts folder 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -61,11 +61,14 @@ def main():
     if resolution_product > 250 * 250:
         print("[DECISION] Using Optuna + Hyperband (multi-fidelity HPO)")
         start = time.time()
-        best_architecture_params = optuna_arch_search(dataset_name)
+        #best_architecture_params = optuna_arch_search(dataset_name)
+        best_architecture_params = load_hpo_params("best_config_skin_cancer.json")
+
         architecture_time = time.time() - start
       
         start = time.time()
-        best_param_hpo = run_hpo(dataset_name, best_architecture_params, test_flag)
+        #best_param_hpo = run_hpo(dataset_name, best_architecture_params, test_flag)
+        best_param_hpo = load_hpo_params("hpo_best_trial_params.json")
 
         hpo_time = time.time() - start
 
