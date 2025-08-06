@@ -1,0 +1,49 @@
+{
+  "dataset": "emotions",
+  "num_samples": 28709,
+  "num_classes": 7,
+  "image_resolution": [
+    48,
+    48
+  ],
+  "num_channels": 1,
+  "is_grayscale": true,
+  "class_counts": {
+    "0": 3995,
+    "2": 4097,
+    "4": 4830,
+    "6": 4965,
+    "3": 7215,
+    "5": 3171,
+    "1": 436
+  },
+  "class_distribution": {
+    "0": 0.1392,
+    "1": 0.0152,
+    "2": 0.1427,
+    "3": 0.2513,
+    "4": 0.1682,
+    "5": 0.1105,
+    "6": 0.1729
+  },
+  "mean_class_frequency": 0.142857,
+  "median_class_frequency": 0.142708,
+  "is_imbalanced": false,
+  "undersampled_classes": {
+    "0": {
+      "current_count": 3995,
+      "target_count": 4097,
+      "augmentation_multiplier": 1.03
+    },
+    "5": {
+      "current_count": 3171,
+      "target_count": 4097,
+      "augmentation_multiplier": 1.29
+    },
+    "1": {
+      "current_count": 436,
+      "target_count": 4097,
+      "augmentation_multiplier": 9.4
+    }
+  }
+}

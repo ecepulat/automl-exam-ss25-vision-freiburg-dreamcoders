@@ -61,14 +61,13 @@ def main():
     if resolution_product > 250 * 250:
         print("[DECISION] Using Optuna + Hyperband (multi-fidelity HPO)")
         start = time.time()
-        #best_architecture_params = optuna_arch_search(dataset_name)
-        best_architecture_params = load_hpo_params("best_config_skin_cancer.json")
+        best_architecture_params = optuna_arch_search(dataset_name)
+        
 
         architecture_time = time.time() - start
       
         start = time.time()
-        #best_param_hpo = run_hpo(dataset_name, best_architecture_params, test_flag)
-        best_param_hpo = load_hpo_params("hpo_best_trial_params.json")
+        best_param_hpo = run_hpo(dataset_name, best_architecture_params, test_flag)
 
         hpo_time = time.time() - start
 
@@ -99,7 +98,7 @@ def main():
 
         # HPO
         start = time.time()
-        best_param_hpo = run_darts_hpo(dataset_name, best_architecture_params, metadata_path, test_flag)
+        best_param_hpo = run_darts_hpo(dataset_name, best_architecture_params, metadata_path)
         hpo_time = time.time() - start
         print(f"[DEBUG] Got HPO params: {best_param_hpo}")
         print(f"[TIMING] HPO took {hpo_time:.2f} seconds")
