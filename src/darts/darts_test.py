@@ -101,3 +101,66 @@ def evaluate_on_test(dataset_name, best_architecture_params, save_dir):
         f.write(report + "\n")
 
     return acc
+def generate_test_predictions(dataset_name, best_architecture_params, save_dir):
+    """
+    Generates predictions on the unlabeled test set and saves them under
+    project_root/data/exam_dataset/predictions.npy
+    """
+    print("\n🧪 Generating predictions for unlabeled test set...")
+
+    metadata_path = f"dataset_analysis_{dataset_name}.json"
+    with open(metadata_path) as f:
+        metadata = json.load(f)
+
+    class_count = metadata["num_classes"]
+    is_grayscale = metadata.get("is_grayscale", False)
+    transform = utils.get_dynamic_transform(metadata, resize_to=32)
+
+    # Load test images (ignore labels)
+    test_data = GenericImageDataset(
+        root=os.path.join("data", dataset_name),
+        split="test",
+        transform=transform,
+        is_grayscale=is_grayscale
+    )
+    test_loader = DataLoader(test_data, batch_size=64, shuffle=False, pin_memory=True, num_workers=4)
+
+    # Build model
+    genotype = Genotype(
+        normal=best_architecture_params["normal"],
+        normal_concat=best_architecture_params["normal_concat"],
+        reduce=best_architecture_params["reduce"],
+        reduce_concat=best_architecture_params["reduce_concat"]
+    )
+
+    args = SimpleNamespace(
+        init_channels=36,
+        layers=20,
+        auxiliary=False,
+        arch="DARTS_FINAL",
+        gpu=0
+    )
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = Network(args.init_channels, class_count, args.layers, args.auxiliary, genotype).to(device)
+
+    model_path = os.path.join(save_dir, "weights.pt")
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    preds = []
+    with torch.no_grad():
+        for images, _ in test_loader:  # Ignore labels
+            images = images.to(device)
+            outputs = model(images)
+            logits = outputs[0] if isinstance(outputs, tuple) else outputs
+            preds.extend(logits.argmax(dim=1).cpu().numpy())
+
+    # ✅ Save exactly like Optuna pipeline (project root relative)
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    save_path = os.path.join(project_root, "data", "exam_dataset", "predictions.npy")
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    np.save(save_path, np.array(preds, dtype=np.int64))
+
+    print(f"✅ Predictions saved to {save_path} — shape: {len(preds)}")
+    return preds

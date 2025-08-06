@@ -18,7 +18,8 @@ from sklearn.model_selection import train_test_split
 from . import utils
 from .model import NetworkCIFAR as Network
 from .genotypes import Genotype
-from .darts_test import evaluate_on_test
+from .darts_test import evaluate_on_test, generate_test_predictions
+
 
 
 class GenericImageDataset(Dataset):
@@ -102,7 +103,7 @@ def infer(valid_queue, model, criterion, args):
     return top1.avg, objs.avg
 
 
-def full_train(dataset_name, best_architecture_params, best_hpo_params, class_count):
+def full_train(dataset_name, best_architecture_params, best_hpo_params, class_count, test_mode=False):
     print("\n🚀 Retraining final model with best architecture + best hyperparameters (DARTS)...")
 
     torch.cuda.empty_cache()
@@ -222,8 +223,16 @@ def full_train(dataset_name, best_architecture_params, best_hpo_params, class_co
     torch.save(model.state_dict(), os.path.join(save_dir, "weights.pt"))
 
     # 🧪 Evaluate on test set
-    evaluate_on_test(
-        dataset_name=dataset_name,
-        best_architecture_params=best_architecture_params,
-        save_dir=save_dir
-    )
+    if not test_mode:
+        evaluate_on_test(
+            dataset_name=dataset_name,
+            best_architecture_params=best_architecture_params,
+            save_dir=save_dir
+        )
+    else:
+        # Generate predictions without labels
+        generate_test_predictions(
+            dataset_name=dataset_name,
+            best_architecture_params=best_architecture_params,
+            save_dir=save_dir
+        )

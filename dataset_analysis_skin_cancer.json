@@ -1,0 +1,54 @@
+{
+  "dataset": "skin_cancer",
+  "num_samples": 7010,
+  "num_classes": 7,
+  "image_resolution": [
+    450,
+    450
+  ],
+  "num_channels": 3,
+  "is_grayscale": false,
+  "class_counts": {
+    "5": 4693,
+    "4": 779,
+    "3": 81,
+    "2": 769,
+    "0": 229,
+    "6": 99,
+    "1": 360
+  },
+  "class_distribution": {
+    "0": 0.0327,
+    "1": 0.0514,
+    "2": 0.1097,
+    "3": 0.0116,
+    "4": 0.1111,
+    "5": 0.6695,
+    "6": 0.0141
+  },
+  "mean_class_frequency": 0.142857,
+  "median_class_frequency": 0.051355,
+  "is_imbalanced": true,
+  "undersampled_classes": {
+    "3": {
+      "current_count": 81,
+      "target_count": 380,
+      "augmentation_multiplier": 4.69
+    },
+    "0": {
+      "current_count": 229,
+      "target_count": 380,
+      "augmentation_multiplier": 1.66
+    },
+    "6": {
+      "current_count": 99,
+      "target_count": 380,
+      "augmentation_multiplier": 3.84
+    },
+    "1": {
+      "current_count": 360,
+      "target_count": 380,
+      "augmentation_multiplier": 1.06
+    }
+  }
+}
