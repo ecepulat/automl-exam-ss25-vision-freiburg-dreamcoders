@@ -27,6 +27,7 @@ import optuna
 import traceback
 from random import sample
 import json
+from sklearn.metrics import f1_score
 from torch.utils.data import WeightedRandomSampler
 class QuickTrain:
     def __init__(self, dataset_name, batch_size=32, epochs=3, model_name="custom", config_path=None, min_samples_per_class=200, learning_rate=1e-4, optimizer_name="Adam", weight_decay=0.0, architecture_params=None, test_mode=False):
@@ -60,12 +61,13 @@ class QuickTrain:
             f.write(f"  • Batch Size: {self.batch_size}\n")
             f.write(f"  • Optimizer: {self.optimizer}\n")
             f.write(f"  • Loss Function: CrossEntropyLoss\n\n")
+            f.write(f"  • Min Nu SAmples: {self.min_samples_per_class} \n\n")
 
     def _load_metadata(self):
         path = os.path.abspath(f"../../dataset_analysis_{self.dataset_name}.json")
         if not os.path.exists(path):
             print("📉 Metadata file not found — running data_analyze.py ...")
-            self.metadata = analyze_dataset(self.dataset_name, save_to_file=True, min_samples_per_class=150)
+            self.metadata = analyze_dataset(self.dataset_name, save_to_file=True, min_samples_per_class=200)
         with open(path, "r") as f:
             self.metadata = json.load(f)
 
@@ -102,17 +104,29 @@ class QuickTrain:
         # STEP 1: Create balanced dataset with augmentation
         # BalancedDataset will oversample/augment undersampled classes
         # ------------------------------------------------------
-        full_train_dataset = BalancedDataset(df, images_path, self.metadata)
+        full_train_dataset = BalancedDataset(
+                df,
+                images_path,
+                self.metadata,
+                resized_res=None,
+                min_samples_per_class=self.min_samples_per_class
+            )
 
         # Get label distribution after augmentation
         balanced_labels = [int(lbl) for _, lbl in [(p, l) for p, l, _ in full_train_dataset.data]]
         self.balanced_counts = dict(Counter(balanced_labels))
 
         # Log class distribution after augmentation
-        with open("class_distribution.log", "a") as f:
-            f.write("\n📊 Class distribution AFTER augmentation:\n")
+        total_after_aug = sum(self.balanced_counts.values())
+        with open(self.LOG_FILE, "a") as f:
+            f.write(f"--- Dataset Build for Trial ---\n")
+            f.write(f"  • min_samples_per_class: {self.min_samples_per_class}\n")
+            f.write(f"  • Total Samples After Augmentation: {total_after_aug}\n")
+            f.write(f"  • Class Counts After Augmentation:\n")
             for cls, count in sorted(self.balanced_counts.items()):
-                f.write(f"  Class {cls}: {count} samples\n")
+                f.write(f"      Class {cls}: {count} samples\n")
+            f.write("\n")
+
 
         # ------------------------------------------------------
         # STEP 2: Balanced split for validation
@@ -529,6 +543,7 @@ def objective(trial, dataset_name, architecture_params, test_mode, median_count)
 
     # 4. Other relevant HPO parameters
     min_samples = trial.suggest_int("min_samples_per_class", max(200,median_count), 400)
+    
     batch_size = trial.suggest_categorical("batch_size", [16,32])
 
 
@@ -541,7 +556,7 @@ def objective(trial, dataset_name, architecture_params, test_mode, median_count)
             architecture_params=architecture_params,
             min_samples_per_class=min_samples,
             batch_size=batch_size,
-            epochs=2,
+            epochs=3,
             learning_rate=lr,
             optimizer_name=optimizer_name,
             test_mode=test_mode
@@ -552,9 +567,21 @@ def objective(trial, dataset_name, architecture_params, test_mode, median_count)
         trainer.optimizer.param_groups[0]['weight_decay'] = weight_decay
 
         trainer.train()
-        acc = trainer.evaluate_val()
-        print(f"✅ Trial {trial.number} finished with accuracy: {acc:.4f}")
-        return acc
+        trainer.model.eval()
+        all_preds, all_labels = [], []
+        with torch.no_grad():
+            for images, labels in trainer.val_loader:
+                images, labels = images.to(trainer.device), labels.to(trainer.device)
+                outputs = trainer.model(images)
+                preds = outputs.argmax(1)
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+
+        # Macro-F1 for balanced importance
+        f1 = f1_score(all_labels, all_preds, average='macro')
+        print(f"✅ Trial {trial.number} finished with F1: {f1:.4f}")
+        return f1
+    
     except Exception as e:
         log_path = "hpo_trial_errors.log"
         error_msg = (
@@ -604,7 +631,7 @@ def run_hpo(dataset_name, architecture_params, test_mode):
 
     # Start the HPO process
     study.optimize(lambda trial: objective(trial, dataset_name, architecture_params, test_mode,median_count), 
-     n_trials=2) #2hours HPO
+     timeout=7200) #2hours HPO
 
     # ✅ Log the best trial
     print("\n✅ Best trial:")
@@ -634,9 +661,9 @@ def run_hpo(dataset_name, architecture_params, test_mode):
     plt.clf()
 
     # Parameter importances
-    #vis.plot_param_importances(study)
-    #plt.gcf().savefig(f"plots/{dataset_name}_optuna_importance.png", dpi=300, bbox_inches='tight')
-    #plt.clf()
+    vis.plot_param_importances(study)
+    plt.gcf().savefig(f"plots/{dataset_name}_optuna_importance.png", dpi=300, bbox_inches='tight')
+    plt.clf()
 
     print("✅ HPO complete and visualizations saved.")
 

@@ -129,7 +129,8 @@ def calculate_median_margin(class_counts):
     """
     # If class_counts contains dicts, extract 'current_count'
     sample_values = list(class_counts.values())
-    with open("class_distribution.log", "w") as f:
+    with open("class_distribution.log", "a") as f:
+        f.write("\n=== New Call to calculate_median_margin ===\n")
         f.write("📊 Class distribution BEFORE augmentation:\n")
         for cls, count in sorted(class_counts.items()):
             f.write(f"  Class {cls}: {count} samples\n")
@@ -139,6 +140,7 @@ def calculate_median_margin(class_counts):
     else:
         counts = np.array(sample_values)
     median = np.median(counts)
+    print("[DEBUG] calculate_median_margin input type:", type(class_counts))
     return int(median)
 
 def get_undersampled_classes(class_counts, min_samples_per_class):
@@ -159,7 +161,7 @@ def get_undersampled_classes(class_counts, min_samples_per_class):
                 "target_count": target,
                 "augmentation_multiplier": multiplier
             }
-
+    print("[DEBUG] get_undersampled_classes returning type:", type(undersampled))
     return undersampled
 def get_oversampled_classes(class_counts, detect_factor=2.0, limit_factor=3.0):
     """

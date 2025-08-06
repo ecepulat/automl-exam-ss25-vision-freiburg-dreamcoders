@@ -18,7 +18,8 @@ from model_builder import build_model_from_config
 from torch.utils.data import random_split
 import traceback
 import random
-
+from collections import Counter
+import numpy as np
 import datetime
 optuna.logging.set_verbosity(optuna.logging.INFO)
 
@@ -164,14 +165,55 @@ def objective(trial, dataset_name="flowers"):
         balanced_dataset = BalancedDataset(df, images_path, metadata, resized_res=new_res)
         # Step 2: Split the indices
 
-        val_ratio = 0.2
-        val_size = int(len(balanced_dataset) * val_ratio)
-        train_size = len(balanced_dataset) - val_size
-        train_dataset, val_dataset = random_split(balanced_dataset, [train_size, val_size])
-        #Step 3: Wrap in DataLoaders
-        train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+
+        # Get all labels from balanced_dataset
+        all_labels = [balanced_dataset[i][1] for i in range(len(balanced_dataset))]
+        unique_classes = np.unique(all_labels)
+
+        # Ensure min per class is respected
+        min_class_count = min([all_labels.count(cls) for cls in unique_classes])
+        val_per_class = max(1, int(min_class_count * 0.2))  # 20% per class
+
+        train_indices, val_indices = [], []
+        for cls in unique_classes:
+            cls_indices = np.where(np.array(all_labels) == cls)[0]
+            val_cls_idx = np.random.choice(cls_indices, size=val_per_class, replace=False)
+            train_cls_idx = np.setdiff1d(cls_indices, val_cls_idx)
+            val_indices.extend(val_cls_idx)
+            train_indices.extend(train_cls_idx)
+
+        train_dataset = torch.utils.data.Subset(balanced_dataset, train_indices)
+        val_dataset = torch.utils.data.Subset(balanced_dataset, val_indices)
+            
+        with open("class_distribution.log", "a") as f:
+            f.write("\n📊 NAS Class distribution AFTER augmentation (NAS):\n")
+            for cls, count in sorted(Counter(all_labels).items()):
+                f.write(f"  Class {cls}: {count} samples\n")
+
+        from torch.utils.data import WeightedRandomSampler
+
+        train_labels = [all_labels[i] for i in train_indices]
+        class_sample_count = np.array([train_labels.count(c) for c in sorted(set(train_labels))])
+        weight_per_class = 1.0 / class_sample_count
+        sample_weights = [weight_per_class[label] for label in train_labels]
+
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(train_dataset),
+            replacement=True
+        )
+
+        train_loader = DataLoader(train_dataset, batch_size=32, sampler=sampler)
+                
+                
         #We dont shuffle the validation set because We want deterministic, reproducible evaluation.
-        val_loader = DataLoader(val_dataset, batch_size=16)
+       
+       
+        val_loader = DataLoader(val_dataset, batch_size=32)
+
+
+
+
 
         # Model initialization
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -186,7 +228,7 @@ def objective(trial, dataset_name="flowers"):
         criterion = nn.CrossEntropyLoss()
         
         # Training loop (5 epochs)
-        for epoch in range(1):
+        for epoch in range(3):
             start = time.time()
             print(f"trial : {trial.number} epoch : {epoch}")
             model.train()
@@ -258,7 +300,7 @@ def optuna_arch_search(dataset_name):
     study.optimize(
     lambda trial: objective(trial, dataset_name),
     callbacks=[print_current_trial],
-    n_trials=1 #3hours NAS
+    timeout=7200 #3hours NAS
 )
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)
