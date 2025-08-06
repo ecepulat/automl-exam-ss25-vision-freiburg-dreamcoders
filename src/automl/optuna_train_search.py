@@ -21,6 +21,7 @@ import random
 from collections import Counter
 import numpy as np
 import datetime
+from torch.utils.data import WeightedRandomSampler
 optuna.logging.set_verbosity(optuna.logging.INFO)
 
 def define_search_space(trial, ds_budget):
@@ -90,6 +91,9 @@ def compute_downsampling_budget(input_res, min_output_size=8):
     return math.floor(math.log2(input_res / min_output_size))
 
 def print_current_trial(study, trial):
+    if not study.best_trials:  # no successful trials yet
+        print(f"[Trial {trial.number}] No successful trial yet.")
+        return
     trial_info = {
         "trial_number": trial.number,
         "value": trial.value,
@@ -161,41 +165,42 @@ def objective(trial, dataset_name="flowers"):
         images_path = os.path.join(base_path, "images_train")
 
         #========== Dataset TRAIN / VALIDATION Split
-        # Step 1: Create one big balanced dataset first
-        balanced_dataset = BalancedDataset(df, images_path, metadata, resized_res=new_res)
-        # Step 2: Split the indices
-
-
-        # Get all labels from balanced_dataset
-        all_labels = [balanced_dataset[i][1] for i in range(len(balanced_dataset))]
-        unique_classes = np.unique(all_labels)
-
-        # Ensure min per class is respected
-        min_class_count = min([all_labels.count(cls) for cls in unique_classes])
-        val_per_class = max(1, int(min_class_count * 0.2))  # 20% per class
-
-        train_indices, val_indices = [], []
-        for cls in unique_classes:
-            cls_indices = np.where(np.array(all_labels) == cls)[0]
-            val_cls_idx = np.random.choice(cls_indices, size=val_per_class, replace=False)
-            train_cls_idx = np.setdiff1d(cls_indices, val_cls_idx)
-            val_indices.extend(val_cls_idx)
-            train_indices.extend(train_cls_idx)
-
-        train_dataset = torch.utils.data.Subset(balanced_dataset, train_indices)
-        val_dataset = torch.utils.data.Subset(balanced_dataset, val_indices)
-            
+        # ===== 1. Stratified split before augmentation =====
+        train_df, val_df = train_test_split(
+            df,
+            test_size=0.2,
+            stratify=df["label"],
+            random_state=42
+        )
+         # ===== 2. Augmented training dataset =====
+        train_dataset = BalancedDataset(
+            train_df,
+            images_path,
+            metadata,
+            resized_res=new_res,
+            min_samples_per_class=200  # adjust if you want in NAS
+        )
+         # ===== 3. Plain validation dataset (no balancing) =====
+        val_dataset = BalancedDataset(
+            val_df,
+            images_path,
+            metadata,
+            resized_res=new_res,
+            min_samples_per_class=0  # disables oversampling
+        )
+        # ===== Log post-augmentation distribution =====
         with open("class_distribution.log", "a") as f:
-            f.write("\n📊 NAS Class distribution AFTER augmentation (NAS):\n")
-            for cls, count in sorted(Counter(all_labels).items()):
+            f.write("\n NAS Class distribution AFTER augmentation (NAS):\n")
+            aug_labels = [int(lbl) for _, lbl, _ in train_dataset.data]
+            for cls, count in sorted(Counter(aug_labels).items()):
                 f.write(f"  Class {cls}: {count} samples\n")
 
-        from torch.utils.data import WeightedRandomSampler
-
-        train_labels = [all_labels[i] for i in train_indices]
+        # ===== 4. Weighted sampler for training =====
+        train_labels = [int(lbl) for _, lbl, _ in train_dataset.data]  # ensure int
         class_sample_count = np.array([train_labels.count(c) for c in sorted(set(train_labels))])
         weight_per_class = 1.0 / class_sample_count
-        sample_weights = [weight_per_class[label] for label in train_labels]
+        sample_weights = [weight_per_class[int(label)] for label in train_labels]  # index with int
+
 
         sampler = WeightedRandomSampler(
             weights=sample_weights,
@@ -204,14 +209,7 @@ def objective(trial, dataset_name="flowers"):
         )
 
         train_loader = DataLoader(train_dataset, batch_size=32, sampler=sampler)
-                
-                
-        #We dont shuffle the validation set because We want deterministic, reproducible evaluation.
-       
-       
-        val_loader = DataLoader(val_dataset, batch_size=32)
-
-
+        val_loader   = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
 
 
@@ -228,7 +226,7 @@ def objective(trial, dataset_name="flowers"):
         criterion = nn.CrossEntropyLoss()
         
         # Training loop (5 epochs)
-        for epoch in range(3):
+        for epoch in range(2):
             start = time.time()
             print(f"trial : {trial.number} epoch : {epoch}")
             model.train()
@@ -300,7 +298,7 @@ def optuna_arch_search(dataset_name):
     study.optimize(
     lambda trial: objective(trial, dataset_name),
     callbacks=[print_current_trial],
-    timeout=7200 #3hours NAS
+    timeout=300 #3hours NAS
 )
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)

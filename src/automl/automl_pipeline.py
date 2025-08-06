@@ -107,7 +107,8 @@ def main():
             dataset_name=dataset_name,
             best_architecture_params=best_architecture_params,
             best_hpo_params=best_param_hpo,
-            class_count=class_count
+            class_count=class_count,
+            test_mode=test_flag
         )
         final_train_time = time.time() - start
         print(f"[TIMING] Final training took {final_train_time:.2f} seconds")
