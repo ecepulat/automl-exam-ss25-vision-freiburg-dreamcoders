@@ -1,15 +1,3 @@
-train_search.py		🔍 Main search loop — where DARTS optimizes alpha and w.
-train.py		🏋️ Retrains the final (discretized) architecture from scratch.
-model_search.py		📐 Network definition used during the architecture search phase.
-model.py		📐 Network used for final training (after search completes).
-operations.py		🔧 Defines all candidate operations (e.g., conv 3x3, maxpool, etc.).
-genotypes.py		🧬 Stores and loads architectures (as named configurations).
-architect.py		🎯 Bilevel optimization logic — the core of DARTS gradient updates.
-utils.py		🔧 Logging, checkpointing, and helper functions.
-visualize.py		🧠 Visualizes architectures (optional, useful for debugging).
-test.py			✅ Basic testing script (optional).
-
-# UPDATED VERSION
 | File                  | Purpose                                                                                               |
 | ----------------------| ----------------------------------------------------------------------------------------------------- |
 | darts_train_search.py | Runs architecture search with DARTS. Returns best genotype.                                           |

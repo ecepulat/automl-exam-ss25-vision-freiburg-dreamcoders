@@ -12,7 +12,7 @@ def final_train(dataset_name, best_architecture_params, best_hpo_params, test_mo
         architecture_params=best_architecture_params,  # 👈 from NAS
         min_samples_per_class=best_hpo_params["min_samples_per_class"],
         batch_size=best_hpo_params["batch_size"],
-        epochs=30,  # Longer training
+        epochs=40,  # Longer training
         learning_rate=best_hpo_params["lr"],
         optimizer_name=best_hpo_params["optimizer"],
         weight_decay=best_hpo_params["weight_decay"],

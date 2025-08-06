@@ -225,8 +225,8 @@ def objective(trial, dataset_name="flowers"):
         optimizer = optim.Adam(model.parameters(), lr=trial.suggest_float("lr", 1e-5, 1e-3, log=True))
         criterion = nn.CrossEntropyLoss()
         
-        # Training loop (5 epochs)
-        for epoch in range(5):
+       
+        for epoch in range(7):
             start = time.time()
             print(f"trial : {trial.number} epoch : {epoch}")
             model.train()
@@ -298,7 +298,7 @@ def optuna_arch_search(dataset_name):
     study.optimize(
     lambda trial: objective(trial, dataset_name),
     callbacks=[print_current_trial],
-    timeout=7200 #3hours NAS
+    timeout=10800 #3hours NAS
 )
     print("Best trial found:", study.best_trial.params)
     save_best_config(study, dataset_name)

@@ -133,7 +133,7 @@ def full_train(dataset_name, best_architecture_params, best_hpo_params, class_co
         weight_decay=best_hpo_params["weight_decay"],
         report_freq=50,
         gpu=0,
-        epochs=5,  # 🔧 Reduced from 70 for testing
+        epochs=50, 
         init_channels=36,
         layers=20,
         model_path='saved_models',

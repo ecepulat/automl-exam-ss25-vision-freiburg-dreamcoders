@@ -193,7 +193,7 @@ def darts_arch_search(dataset_name: str):
         weight_decay=3e-4,
         report_freq=50,
         gpu=0,
-        epochs=3, #Tried 5 for debugging
+        epochs=15, 
         init_channels=8,
         layers=5,
         model_path='saved_models',

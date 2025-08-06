@@ -26,6 +26,7 @@ from utils import get_default_transforms
 import optuna
 import traceback
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from pathlib import Path
 
 
 from torch.utils.data import WeightedRandomSampler
@@ -70,7 +71,11 @@ class QuickTrain:
             f.write(f"  • Min Nu SAmples: {self.min_samples_per_class} \n\n")
 
     def _load_metadata(self):
-        path = os.path.abspath(f"../../dataset_analysis_{self.dataset_name}.json")
+
+        project_root = Path(__file__).resolve().parents[2]  # keeps it safe if running from anywhere
+        path = project_root / f"dataset_analysis_{self.dataset_name}.json"
+
+
         if not os.path.exists(path):
             print("📉 Metadata file not found — running data_analyze.py ...")
             self.metadata = analyze_dataset(self.dataset_name, save_to_file=True, min_samples_per_class=200)
@@ -583,7 +588,7 @@ def run_hpo(dataset_name, architecture_params, test_mode):
 
     # Start the HPO process
     study.optimize(lambda trial: objective(trial, dataset_name, architecture_params, test_mode,median_count), 
-     timeout=7200) #2hours HPO
+     timeout=10800) #2hours HPO
 
     # ✅ Log the best trial
     print("\n✅ Best trial:")

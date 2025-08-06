@@ -113,7 +113,7 @@ def run_darts_hpo(dataset_name, best_architecture_params, metadata_path=None):
             grad_clip=5,
             report_freq=50,
             gpu=0,
-            epochs=3 # Tried 5 for debug
+            epochs=10 
         )
 
         torch.cuda.set_device(args.gpu)
@@ -129,7 +129,7 @@ def run_darts_hpo(dataset_name, best_architecture_params, metadata_path=None):
             reduce_concat=best_architecture_params["reduce_concat"]
         )
 
-        model = Network(24, class_count, 20, False, genotype).cuda() # It was 36 before
+        model = Network(24, class_count, 20, False, genotype).cuda() 
         criterion = nn.CrossEntropyLoss().cuda()
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
         train_queue = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=4)
@@ -144,7 +144,7 @@ def run_darts_hpo(dataset_name, best_architecture_params, metadata_path=None):
             print(f"Epoch {epoch+1}/{args.epochs} | Val Acc: {val_acc:.2f}")
         return best_val_acc
 
-    n_trials = 2 # tried 5 for debug
+    n_trials = 10 
     pbar = tqdm(total=n_trials)
 
     def callback(study, trial):
